@@ -1,0 +1,6 @@
+{
+  "name": "Raviraja CRM - IN Voucher Module",
+  "description": "Professional IN Voucher Entry and Register module for Raviraja Industries Private Limited CRM with automated numbering, Indian currency conversion, document uploads, and A4 PDF printing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
