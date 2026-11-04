@@ -1156,7 +1156,7 @@ export const InVoucherForm: React.FC<InVoucherFormProps> = ({
         </div>
 
         {/* BOTTOM ACTION BAR */}
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 sticky bottom-4 z-20">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
               type="button"
