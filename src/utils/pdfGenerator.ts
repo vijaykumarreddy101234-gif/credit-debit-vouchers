@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { InVoucher } from '../types/voucher';
+import { CreditVoucher, DebitVoucher, InVoucher } from '../types/voucher';
 import { formatIndianCurrency } from './numberToWordsIndian';
 
 export function generateVoucherPdf(voucher: InVoucher): void {
@@ -37,7 +37,7 @@ export function generateVoucherPdf(voucher: InVoucher): void {
 
   let curY = margin + 28;
 
-  const isOut = voucher.voucherType === 'OUT' || voucher.voucherType === 'OUT(Debit)';
+  const isOut = voucher.voucherType === 'OUT(Debit)';
   const vTypeLabel = isOut ? 'OUT(Debit)' : 'IN(Credit)';
 
   // Title Ribbon
@@ -58,11 +58,11 @@ export function generateVoucherPdf(voucher: InVoucher): void {
   doc.roundedRect(statusX, curY + 1.8, 30, 6.5, 1, 1, 'FD');
   doc.setFontSize(8);
   doc.setTextColor(21, 128, 61);
-  doc.text(voucher.status.toUpperCase(), statusX + 4, curY + 6);
+  doc.text(voucher.approvalStatus.toUpperCase(), statusX + 4, curY + 6);
 
   curY += 14;
 
-  // Top Metadata Grid (2 Columns: Left = Voucher No, Date; Right = Ref Details, Ref Date)
+  // Top Metadata Grid
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226, 232, 240);
   doc.rect(margin, curY, contentWidth, 24, 'FD');
@@ -82,47 +82,53 @@ export function generateVoucherPdf(voucher: InVoucher): void {
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('Voucher Date:', margin + 4, curY + 13);
+  doc.text('Accountant Name:', margin + 4, curY + 11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
-  doc.text(voucher.voucherDate || '', margin + 35, curY + 13);
+  doc.text(voucher.accountantName || '-', margin + 35, curY + 11);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('Voucher Type:', margin + 4, curY + 20);
+  doc.text('Voucher Date:', margin + 4, curY + 16);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(15, 23, 42);
+  doc.text(voucher.date || '', margin + 35, curY + 16);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(71, 85, 105);
+  doc.text('Voucher Type:', margin + 4, curY + 21);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(isOut ? 225 : 16, isOut ? 29 : 185, isOut ? 72 : 129);
-  doc.text(vTypeLabel, margin + 35, curY + 20);
+  doc.text(vTypeLabel, margin + 35, curY + 21);
 
   // Column 2
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('Reference Details:', midX + 4, curY + 6);
+  doc.text('Reference Date:', midX + 4, curY + 6);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
-  const refText = voucher.referenceDetails || 'N/A';
-  const splitRef = doc.splitTextToSize(refText, (contentWidth / 2) - 40);
-  doc.text(splitRef[0] || 'N/A', midX + 38, curY + 6);
+  doc.text(voucher.referenceDate || 'N/A', midX + 38, curY + 6);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('Reference Date:', midX + 4, curY + 13);
-  doc.setFont('helvetica', 'normal');
+  doc.text('GSTIN:', midX + 4, curY + 11);
+  doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(voucher.referenceDate || 'N/A', midX + 38, curY + 13);
+  doc.text(isOut ? (voucher as DebitVoucher).supplierGstin || '-' : (voucher as CreditVoucher).customerGstin || '-', midX + 38, curY + 11);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('Payment Mode:', midX + 4, curY + 20);
+  doc.text(isOut ? 'Payment Mode:' : 'Receipt Mode:', midX + 4, curY + 16);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(30, 64, 175);
-  let modeStr = voucher.paymentMode;
-  if (voucher.paymentModeDetails?.chequeNo) {
-    modeStr += ` (Chq No: ${voucher.paymentModeDetails.chequeNo})`;
-  } else if (voucher.paymentModeDetails?.transactionRef) {
-    modeStr += ` (Ref: ${voucher.paymentModeDetails.transactionRef})`;
-  }
-  doc.text(modeStr, midX + 38, curY + 20);
+  doc.text(isOut ? (voucher as DebitVoucher).paymentMode : (voucher as CreditVoucher).receiptMode, midX + 38, curY + 16);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(71, 85, 105);
+  doc.text('Person Name:', midX + 4, curY + 21);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(15, 23, 42);
+  doc.text(voucher.personName || '-', midX + 38, curY + 21);
 
   curY += 28;
 
@@ -158,17 +164,22 @@ export function generateVoucherPdf(voucher: InVoucher): void {
     curY += rowHeight;
   };
 
-  drawRow('Person Name :-', voucher.personName || voucher.receivedFrom, 10, true);
-  if (voucher.supplierGstin) {
-    drawRow('Supplier GSTIN', voucher.supplierGstin, 10);
+  if (isOut) {
+    const dv = voucher as DebitVoucher;
+    drawRow('Supplier Name :-', dv.supplierName, 10, true);
+    drawRow('Expenses Bill', dv.originalPurchaseBill || '-', 10);
+    drawRow('Expenses Bill Date', dv.purchaseBillDate || '-', 10);
+    drawRow('Note / Reason', voucher.noteReason || '-', 10);
+  } else {
+    const cv = voucher as CreditVoucher;
+    drawRow('Customer Name :-', cv.customerName, 10, true);
+    drawRow('Reference Details', cv.referenceDetails || '-', 10);
+    drawRow('Note / Reason', voucher.noteReason || '-', 10);
   }
-  drawRow('Original Purchase Bill', voucher.originalPurchaseBill || voucher.referenceDetails || 'N/A', 10);
-  if (voucher.purchaseBillDate || voucher.referenceDate) {
-    drawRow('Purchase Bill Date', voucher.purchaseBillDate || voucher.referenceDate || 'N/A', 10);
-  }
-  drawRow(isOut ? 'OUT Note Reason :-' : 'IN Note Reason :-', voucher.noteReason || 'Payment recorded per accounts compliance', 11);
-  if (voucher.particularsNotes) {
-    drawRow('Notes / Narration', voucher.particularsNotes, 12);
+
+  drawRow('Purpose / Desc', voucher.description || 'Voucher recorded per accounts compliance', 11);
+  if (voucher.remarks) {
+    drawRow('Remarks', voucher.remarks, 12);
   }
 
   curY += 3;
@@ -182,7 +193,8 @@ export function generateVoucherPdf(voucher: InVoucher): void {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(6, 95, 70);
-  doc.text('TOTAL AMOUNT RECEIVED:', margin + 5, curY + 7);
+  doc.text(isOut ? 'TOTAL AMOUNT PAID:' : 'TOTAL AMOUNT RECEIVED:', margin + 5, curY + 7);
+
 
   doc.setFontSize(14);
   doc.setTextColor(4, 120, 87);
@@ -240,63 +252,54 @@ export function generateVoucherPdf(voucher: InVoucher): void {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(15, 23, 42);
-  doc.text(voucher.preparedBy || 'Accounts Staff', margin + 4, curY + 22);
+  doc.text(voucher.createdBy || 'Accounts Staff', margin + 4, curY + 22);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Date: ${voucher.voucherDate}`, margin + 4, curY + 27);
+  doc.text(`Date: ${voucher.date}`, margin + 4, curY + 27);
 
-  // Column 2: Passed By
+  // Column 2: Approved By
   doc.rect(margin + sigBoxWidth, curY, sigBoxWidth, sigBoxHeight);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text('PASSED / AUTHORIZED BY', margin + sigBoxWidth + 4, curY + 6);
+  doc.text('APPROVED BY', margin + sigBoxWidth + 4, curY + 6);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(15, 23, 42);
-  doc.text(voucher.passedBy || 'Accounts Manager', margin + sigBoxWidth + 4, curY + 22);
+  doc.text(voucher.approvedBy || 'Accounts Manager', margin + sigBoxWidth + 4, curY + 22);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text('Official Seal & Approval', margin + sigBoxWidth + 4, curY + 27);
+  doc.text('Authorized Signatory', margin + sigBoxWidth + 4, curY + 27);
 
-  // Column 3: Receiver's Signature
+  // Column 3: Received / Cashier
   doc.rect(margin + (sigBoxWidth * 2), curY, sigBoxWidth, sigBoxHeight);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text("RECEIVER'S SIGNATURE", margin + (sigBoxWidth * 2) + 4, curY + 6);
+  doc.text(isOut ? "CASHIER / PAYEE" : "RECEIVED BY", margin + (sigBoxWidth * 2) + 4, curY + 6);
 
-  if (voucher.receiverSignature && voucher.receiverSignature.startsWith('data:image')) {
-    try {
-      doc.addImage(voucher.receiverSignature, 'PNG', margin + (sigBoxWidth * 2) + 4, curY + 8, sigBoxWidth - 8, 16);
-    } catch {
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(9);
-      doc.setTextColor(30, 58, 138);
-      doc.text('(Digitally Signed)', margin + (sigBoxWidth * 2) + 8, curY + 18);
-    }
-  } else {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(9);
-    doc.setTextColor(30, 58, 138);
-    doc.text('(Signature on Record)', margin + (sigBoxWidth * 2) + 8, curY + 18);
-  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  const signName = isOut ? (voucher as DebitVoucher).cashierName : (voucher as CreditVoucher).receivedBy;
+  doc.text(signName || '-', margin + (sigBoxWidth * 2) + 4, curY + 22);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text('Verified Payee / Representative', margin + (sigBoxWidth * 2) + 4, curY + 27);
+  doc.text('Acknowledgement Signature', margin + (sigBoxWidth * 2) + 4, curY + 27);
 
   // Footer notes & Computer generated disclaimer
   const footerY = pageHeight - margin - 4;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
-  doc.text('This is an authentic system-generated IN Voucher recorded within the Raviraja ERP / CRM Finance Module.', margin, footerY);
+  doc.text(`This is an authentic system-generated ${isOut ? 'Debit' : 'Credit'} Voucher recorded within the Raviraja ERP Module.`, margin, footerY);
   doc.text(`Printed: ${new Date().toLocaleString()} | User: ${voucher.createdBy || 'Staff'}`, pageWidth - margin - 75, footerY);
 
   // Save PDF
-  doc.save(`${voucher.voucherNo || 'IN-Voucher'}_Raviraja_Industries.pdf`);
+  doc.save(`${voucher.voucherNo || 'Voucher'}_Raviraja_Industries.pdf`);
 }
+

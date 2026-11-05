@@ -20,6 +20,7 @@ interface NavbarProps {
   onRoleChange: (role: UserRole) => void;
   onResetData: () => void;
   onGlobalSearch: (term: string) => void;
+  onToggleSidebar?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -27,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRoleChange,
   onResetData,
   onGlobalSearch,
+  onToggleSidebar,
 }) => {
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -39,23 +41,35 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="no-print bg-slate-900 text-white border-b border-slate-800 shrink-0 z-40 shadow-md">
-      <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div className="w-full px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
         
-        {/* Brand & CRM Identity */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-black text-white text-base shadow-md tracking-tighter">
+        {/* Brand & Mobile Hamburger */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Mobile / Tablet Hamburger Toggle */}
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="lg:hidden p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg focus:outline-none transition-colors"
+            aria-label="Toggle Navigation Menu"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-black text-white text-sm sm:text-base shadow-md tracking-tighter shrink-0">
             RIL
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-sm sm:text-base tracking-tight text-white uppercase">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="font-extrabold text-xs sm:text-base tracking-tight text-white uppercase whitespace-nowrap">
                 RAVIRAJA CRM
               </span>
-              <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+              <span className="hidden xs:inline-block bg-emerald-500/20 text-emerald-400 text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full border border-emerald-500/30 whitespace-nowrap">
                 FINANCE DESK
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 font-medium hidden sm:block">
+            <p className="text-[10px] text-slate-400 font-medium hidden md:block">
               Raviraja Industries Private Limited • Hyderabad
             </p>
           </div>

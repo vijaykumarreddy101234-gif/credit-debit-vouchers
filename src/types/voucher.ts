@@ -1,6 +1,7 @@
-export type PaymentMode = 'Cash' | 'Cheque' | 'DD' | 'Bank' | 'UPI';
+export type PaymentMode = 'Cash' | 'Bank' | 'Cheque' | 'UPI' | 'Other';
+export type ReceiptMode = 'Cash' | 'Bank' | 'Cheque' | 'UPI' | 'Other';
 
-export type VoucherStatus = 'Approved' | 'Pending Verification' | 'Draft';
+export type VoucherStatus = 'Approved' | 'Pending' | 'Rejected' | 'Draft';
 
 export type UserRole = 'Admin' | 'Accounts Staff' | 'Authorized Accounts Manager';
 
@@ -34,80 +35,65 @@ export interface AuditEntry {
   details?: string;
 }
 
-export interface PaymentModeDetails {
-  chequeNo?: string;
-  chequeDate?: string;
-  bankName?: string;
-  transactionRef?: string;
-  upiId?: string;
-}
+export type VoucherType = 'IN(Credit)' | 'OUT(Debit)';
 
-export type VoucherType = 'IN(Credit)' | 'OUT(Debit)' | 'IN' | 'OUT';
-
-export function formatVoucherType(type?: string): 'IN(Credit)' | 'OUT(Debit)' {
-  if (type === 'OUT' || type === 'OUT(Debit)') return 'OUT(Debit)';
+export function formatVoucherType(type?: string): VoucherType {
+  if (type === 'OUT' || type === 'OUT(Debit)' || type === 'Debit') return 'OUT(Debit)';
   return 'IN(Credit)';
 }
 
-export interface InVoucher {
+// Unified interface for shared logic, but with optional fields for both
+export interface BaseVoucher {
   id: string;
-  voucherNo: string; // e.g., IN-0001 or OUT-0001
-  voucherDate: string; // YYYY-MM-DD
-  voucherType: VoucherType;
-  
-  // Section A: Voucher Details (User Custom Sketch: Date, Voucher Type, Voucher No, Person Name, Supplier GSTIN, Original Purchase Bill, Purchase Bill Date, Note Reason)
-  accountId: string;
-  accountName: string; // Accountant Name / Ledger Head
-  personName?: string; // Person Name :-
-  supplierGstin?: string; // Supplier GSTIN
-  originalPurchaseBill?: string; // Original Purchase Bill
-  purchaseBillDate?: string; // Purchase Bill Date
-  referenceDate: string; // YYYY-MM-DD
-  referenceDetails: string; // Invoice / Bill / Supporting Documents
-  paymentParticulars?: string;
-  noteReason: string;
-
-  // Section B: Payment Details
-  receivedFrom: string;
-  paymentMode: PaymentMode;
-  paymentModeDetails?: PaymentModeDetails;
+  voucherNo: string;
+  date: string;
   amount: number;
   amountInWords: string;
-  particularsNotes: string;
-
-  // Section C: Sign-Off Details
-  preparedBy: string;
-  passedBy: string;
-  receiverSignature: string; // Data URL or text representation
-  receiverSignatureType: 'draw' | 'upload' | 'digital';
-
-  // Section D: Document Upload
+  description: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  approvedBy?: string;
+  approvalStatus: VoucherStatus;
+  remarks?: string;
   attachments: VoucherAttachment[];
-
-  // Meta & Audit
-  status: VoucherStatus;
   auditTrail: AuditEntry[];
   createdBy: string;
   createdAt: string;
   updatedBy: string;
   updatedAt: string;
+  
+  // New Fields from Sketch/Requirements
+  accountantName?: string;
+  personName?: string;
+  referenceDate?: string;
+  referenceDetails?: string;
+  paymentParticulars?: string;
+  noteReason?: string;
 }
 
-export interface OutVoucher {
-  id: string;
-  voucherNo: string; // OUT-0001
-  voucherDate: string;
-  voucherType: 'OUT';
-  accountName: string;
-  paidTo: string;
+export interface DebitVoucher extends BaseVoucher {
+  voucherType: 'OUT(Debit)';
   paymentMode: PaymentMode;
-  amount: number;
-  amountInWords: string;
-  particularsNotes: string;
-  status: VoucherStatus;
-  createdBy: string;
-  createdAt: string;
+  supplierDetails: 'Supplier' | 'Employee' | 'Labour Advance' | 'Other';
+  supplierName: string;
+  supplierGstin?: string;
+  originalPurchaseBill?: string;
+  purchaseBillDate?: string;
+  prepaidAmount?: number;
+  cashierName?: string;
 }
+
+export interface CreditVoucher extends BaseVoucher {
+  voucherType: 'IN(Credit)';
+  receiptMode: ReceiptMode;
+  customerName: string;
+  receiptType: 'Sales' | 'Party Payment' | 'Other';
+  receivedBy?: string;
+  customerGstin?: string;
+}
+
+// Maintain compatibility with existing code during transition
+export type InVoucher = CreditVoucher | DebitVoucher;
 
 export interface AccountHead {
   id: string;
@@ -116,3 +102,4 @@ export interface AccountHead {
   group: 'Direct Income' | 'Indirect Income' | 'Current Assets' | 'Sundry Debtors' | 'Advances';
   balance?: number;
 }
+

@@ -1,21 +1,16 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar, ActiveTab } from './components/layout/Sidebar';
-import { InVoucherForm } from './components/voucher/InVoucherForm';
-import { InVoucherRegister } from './components/voucher/InVoucherRegister';
+import { CreditVoucherForm } from './components/voucher/CreditVoucherForm';
+import { CreditVoucherRegister } from './components/voucher/CreditVoucherRegister';
+import { DebitVoucherForm } from './components/voucher/DebitVoucherForm';
+import { DebitVoucherRegister } from './components/voucher/DebitVoucherRegister';
 import { PrintableVoucher } from './components/voucher/PrintableVoucher';
 import { DocumentRegister } from './components/voucher/DocumentRegister';
-import { OutVoucherModule } from './components/voucher/OutVoucherModule';
 import { VoucherDashboard } from './components/voucher/VoucherDashboard';
-import { ChartOfAccountsView } from './components/crm/ChartOfAccountsView';
 import { ClientsView } from './components/crm/ClientsView';
 import { VoucherDetailsModal } from './components/voucher/VoucherDetailsModal';
-import { InVoucher, OutVoucher, UserProfile, UserRole } from './types/voucher';
+import { InVoucher, UserProfile, UserRole, CreditVoucher, DebitVoucher } from './types/voucher';
 import { voucherStorage } from './utils/voucherStorage';
 import { CheckCircle2, X } from 'lucide-react';
 
@@ -24,11 +19,12 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => voucherStorage.getCurrentUser());
 
   // Data Store
-  const [inVouchers, setInVouchers] = useState<InVoucher[]>(() => voucherStorage.getInVouchers());
-  const [outVouchers, setOutVouchers] = useState<OutVoucher[]>(() => voucherStorage.getOutVouchers());
+  const [creditVouchers, setCreditVouchers] = useState<CreditVoucher[]>(() => voucherStorage.getCreditVouchers());
+  const [debitVouchers, setDebitVouchers] = useState<DebitVoucher[]>(() => voucherStorage.getDebitVouchers());
 
   // Navigation State
-  const [activeTab, setActiveTab] = useState<ActiveTab>('in-register');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
   // Active Voucher for Editing or Printing
   const [editingVoucher, setEditingVoucher] = useState<InVoucher | null>(null);
@@ -40,8 +36,8 @@ export default function App() {
 
   // Refresh vouchers from storage
   const refreshData = () => {
-    setInVouchers(voucherStorage.getInVouchers());
-    setOutVouchers(voucherStorage.getOutVouchers());
+    setCreditVouchers(voucherStorage.getCreditVouchers());
+    setDebitVouchers(voucherStorage.getDebitVouchers());
   };
 
   // Role Switcher Handler
@@ -53,11 +49,11 @@ export default function App() {
 
   // Reset Demo Data
   const handleResetData = () => {
-    if (confirm('Reset voucher database to default Raviraja Industries records?')) {
+    if (confirm('Reset database to default ERP records?')) {
       voucherStorage.resetToDefaultData();
       refreshData();
       setCurrentUser(voucherStorage.getCurrentUser());
-      showToast('Database reset to authentic initial Raviraja vouchers.');
+      showToast('Database reset to authentic initial ERP vouchers.');
     }
   };
 
@@ -68,32 +64,29 @@ export default function App() {
     }, 4500);
   };
 
-  // Save Success Callback from InVoucherForm
+  // Save Success Callback
   const handleSaveSuccess = (savedVoucher: InVoucher, andPrint = false) => {
     refreshData();
     setEditingVoucher(null);
 
-    const isOut =
-      savedVoucher.voucherType === 'OUT' ||
-      savedVoucher.voucherType === 'OUT(Debit)' ||
-      (savedVoucher.voucherNo && savedVoucher.voucherNo.startsWith('OUT-'));
+    const isOut = savedVoucher.voucherType === 'OUT(Debit)';
 
     if (andPrint) {
       setPrintingVoucher(savedVoucher);
       showToast(`Voucher ${savedVoucher.voucherNo} saved successfully! Opening printable view...`);
     } else {
       if (isOut) {
-        setActiveTab('out-register');
-        showToast(`OUT Voucher ${savedVoucher.voucherNo} saved successfully in database!`);
+        setActiveTab('debit-register');
+        showToast(`Debit Voucher ${savedVoucher.voucherNo} saved successfully!`);
       } else {
-        setActiveTab('in-register');
-        showToast(`IN Voucher ${savedVoucher.voucherNo} saved successfully in database!`);
+        setActiveTab('credit-register');
+        showToast(`Credit Voucher ${savedVoucher.voucherNo} saved successfully!`);
       }
     }
   };
 
   // Count documents
-  const totalDocsCount = inVouchers.reduce((acc, v) => acc + (v.attachments ? v.attachments.length : 0), 0);
+  const totalDocsCount = [...creditVouchers, ...debitVouchers].reduce((acc, v) => acc + (v.attachments ? v.attachments.length : 0), 0);
 
   return (
     <div className="h-screen bg-slate-100 flex flex-col font-sans overflow-hidden">
@@ -105,13 +98,14 @@ export default function App() {
         onResetData={handleResetData}
         onGlobalSearch={(term) => {
           if (term.trim()) {
-            setActiveTab('in-register');
+            setActiveTab('credit-register');
           }
         }}
+        onToggleSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
       />
 
       {/* Main Workspace */}
-      <div className="flex-1 flex w-full min-h-0 overflow-hidden">
+      <div className="flex-1 flex w-full min-h-0 overflow-hidden relative">
         {/* Sidebar */}
         <Sidebar
           activeTab={activeTab}
@@ -120,17 +114,19 @@ export default function App() {
             setEditingVoucher(null);
             setActiveTab(tab);
           }}
-          inCount={inVouchers.length}
-          outCount={outVouchers.length}
+          inCount={creditVouchers.length}
+          outCount={debitVouchers.length}
           docsCount={totalDocsCount}
+          isOpen={isMobileSidebarOpen}
+          onClose={() => setIsMobileSidebarOpen(false)}
         />
 
         {/* Content Body */}
-        <main className="flex-1 h-full p-4 sm:p-6 lg:p-8 min-w-0 overflow-y-auto">
+        <main className="flex-1 h-full p-3 sm:p-5 lg:p-7 min-w-0 overflow-y-auto">
           
           {/* Toast Notification Banner */}
           {toastMessage && (
-            <div className="no-print mb-5 p-3.5 bg-emerald-700 text-white rounded-xl shadow-lg flex items-center justify-between text-xs font-semibold animate-in slide-in-from-top-2">
+            <div className="no-print mb-5 p-3.5 bg-emerald-700 text-white rounded-xl shadow-lg flex items-center justify-between text-xs font-semibold animate-in slide-in-from-top-2 z-50 relative">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />
                 <span>{toastMessage}</span>
@@ -147,103 +143,79 @@ export default function App() {
 
           {/* Conditional Rendering */}
           {printingVoucher ? (
-            /* Printable Voucher View */
             <PrintableVoucher
               voucher={printingVoucher}
               onBack={() => setPrintingVoucher(null)}
               onEdit={() => {
                 setEditingVoucher(printingVoucher);
                 setPrintingVoucher(null);
-                setActiveTab('in-entry');
+                setActiveTab(printingVoucher.voucherType === 'OUT(Debit)' ? 'debit-entry' : 'credit-entry');
               }}
             />
-          ) : activeTab === 'in-entry' ? (
-            /* IN Voucher Entry Form */
-            <InVoucherForm
-              initialVoucher={editingVoucher}
+          ) : activeTab === 'credit-entry' ? (
+            <CreditVoucherForm
+              initialVoucher={editingVoucher as CreditVoucher}
               currentUser={currentUser}
               onSaveSuccess={handleSaveSuccess}
-              onCancel={() => {
+              onCancel={() => setActiveTab('credit-register')}
+              onSwitchToDebit={() => {
                 setEditingVoucher(null);
-                setActiveTab('in-register');
+                setActiveTab('debit-entry');
               }}
             />
-          ) : activeTab === 'in-register' ? (
-            /* IN Voucher Register */
-            <InVoucherRegister
+          ) : activeTab === 'credit-register' ? (
+            <CreditVoucherRegister
               currentUser={currentUser}
-              vouchers={inVouchers}
+              vouchers={creditVouchers}
               onRefresh={refreshData}
-              onCreateNew={() => {
-                setEditingVoucher(null);
-                setActiveTab('in-entry');
-              }}
+              onCreateNew={() => setActiveTab('credit-entry')}
               onEdit={(v) => {
                 setEditingVoucher(v);
-                setActiveTab('in-entry');
+                setActiveTab('credit-entry');
               }}
-              onPrint={(v) => {
-                setPrintingVoucher(v);
+              onPrint={(v) => setPrintingVoucher(v)}
+              onView={(v) => setViewingVoucher(v)}
+            />
+          ) : activeTab === 'debit-entry' ? (
+            <DebitVoucherForm
+              initialVoucher={editingVoucher as DebitVoucher}
+              currentUser={currentUser}
+              onSaveSuccess={handleSaveSuccess}
+              onCancel={() => setActiveTab('debit-register')}
+              onSwitchToCredit={() => {
+                setEditingVoucher(null);
+                setActiveTab('credit-entry');
               }}
             />
-          ) : activeTab === 'dashboard' ? (
-            /* Voucher Desk Dashboard */
-            <VoucherDashboard
-              inVouchers={inVouchers}
-              outVouchers={outVouchers}
-              onNavigate={(tab) => {
-                if (tab === 'in-entry') {
-                  setEditingVoucher(null);
-                  setActiveTab('in-entry');
-                } else if (tab === 'in-register') {
-                  setActiveTab('in-register');
-                } else if (tab === 'out-entry') {
-                  setActiveTab('out-entry');
-                } else if (tab === 'out-register') {
-                  setActiveTab('out-register');
-                } else if (tab === 'docs') {
-                  setActiveTab('docs');
-                }
+          ) : activeTab === 'debit-register' ? (
+            <DebitVoucherRegister
+              currentUser={currentUser}
+              vouchers={debitVouchers}
+              onRefresh={refreshData}
+              onCreateNew={() => setActiveTab('debit-entry')}
+              onEdit={(v) => {
+                setEditingVoucher(v);
+                setActiveTab('debit-entry');
               }}
+              onPrint={(v) => setPrintingVoucher(v)}
+              onView={(v) => setViewingVoucher(v)}
+            />
+          ) : activeTab === 'dashboard' ? (
+            <VoucherDashboard
+              inVouchers={creditVouchers}
+              outVouchers={debitVouchers}
+              onNavigate={(tab) => setActiveTab(tab as any)}
               onViewVoucher={(v) => setViewingVoucher(v)}
               onPrintVoucher={(v) => setPrintingVoucher(v)}
             />
-          ) : activeTab === 'out-entry' ? (
-            /* Unified Voucher Entry with OUT(Debit) mode */
-            <InVoucherForm
-              initialVoucherType="OUT(Debit)"
-              currentUser={currentUser}
-              onSaveSuccess={handleSaveSuccess}
-              onCancel={() => {
-                setEditingVoucher(null);
-                setActiveTab('out-register');
-              }}
-            />
-          ) : activeTab === 'out-register' ? (
-            /* OUT Voucher Register */
-            <OutVoucherModule
-              initialView="register"
-              currentUser={currentUser}
-              onCreateNewOut={() => {
-                setEditingVoucher(null);
-                setActiveTab('out-entry');
-              }}
-            />
           ) : activeTab === 'docs' ? (
-            /* Central Document Register */
             <DocumentRegister
-              vouchers={inVouchers}
-              onViewVoucher={(v) => {
-                setViewingVoucher(v);
-              }}
+              vouchers={[...creditVouchers, ...debitVouchers]}
+              onViewVoucher={(v) => setViewingVoucher(v)}
             />
-          ) : activeTab === 'accounts' ? (
-            /* Chart of Accounts */
-            <ChartOfAccountsView />
           ) : activeTab === 'crm-leads' ? (
-            /* Clients & Debtors */
             <ClientsView
-              inVouchers={inVouchers}
+              inVouchers={creditVouchers}
               onOpenVoucher={(v) => setViewingVoucher(v)}
             />
           ) : null}
@@ -263,10 +235,11 @@ export default function App() {
         onEdit={(v) => {
           setViewingVoucher(null);
           setEditingVoucher(v);
-          setActiveTab('in-entry');
+          setActiveTab(v.voucherType === 'OUT(Debit)' ? 'debit-entry' : 'credit-entry');
         }}
       />
 
     </div>
   );
 }
+

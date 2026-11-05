@@ -33,26 +33,29 @@ export function exportInVouchersToExcel(vouchers: InVoucher[], filename = 'Ravir
     return `"${str}"`;
   };
 
-  const rows = vouchers.map((v, index) => [
-    index + 1,
-    escapeCell(v.voucherNo),
-    escapeCell(formatVoucherType(v.voucherType)),
-    escapeCell(v.voucherDate),
-    escapeCell(v.accountName),
-    escapeCell(v.receivedFrom),
-    escapeCell(v.paymentMode),
-    escapeCell(v.referenceDetails || '-'),
-    escapeCell(v.referenceDate || '-'),
-    v.amount,
-    escapeCell(v.amountInWords),
-    escapeCell(v.paymentParticulars || '-'),
-    escapeCell(v.noteReason || '-'),
-    escapeCell(v.preparedBy),
-    escapeCell(v.passedBy),
-    escapeCell(v.createdBy),
-    escapeCell(v.status),
-    v.attachments ? v.attachments.length : 0
-  ]);
+  const rows = vouchers.map((v, index) => {
+    const isOut = v.voucherType === 'OUT(Debit)';
+    return [
+      index + 1,
+      escapeCell(v.voucherNo),
+      escapeCell(v.voucherType),
+      escapeCell(v.date),
+      escapeCell(v.accountantName || '-'),
+      escapeCell(isOut ? (v as any).supplierName : (v as any).customerName),
+      escapeCell(isOut ? (v as any).paymentMode : (v as any).receiptMode),
+      escapeCell(v.referenceDetails || '-'),
+      escapeCell(v.referenceDate || '-'),
+      v.amount,
+      escapeCell(v.amountInWords),
+      escapeCell(v.paymentParticulars || '-'),
+      escapeCell(v.noteReason || '-'),
+      escapeCell(v.createdBy), // Using createdBy for preparedBy
+      escapeCell(v.approvedBy || 'Pending'), // Using approvedBy for passedBy
+      escapeCell(v.createdBy),
+      escapeCell(v.approvalStatus),
+      v.attachments ? v.attachments.length : 0
+    ];
+  });
 
   const csvContent = [
     headers.map(h => `"${h}"`).join(','),

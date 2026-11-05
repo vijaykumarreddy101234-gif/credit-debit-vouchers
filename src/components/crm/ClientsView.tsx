@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Users, Search, Building, Phone, Mail, ArrowUpRight, CheckCircle2 } from 'lucide-react';
-import { InVoucher } from '../../types/voucher';
+import { InVoucher, CreditVoucher } from '../../types/voucher';
 import { formatIndianCurrency } from '../../utils/numberToWordsIndian';
 
 interface ClientsViewProps {
@@ -100,9 +100,9 @@ export const ClientsView: React.FC<ClientsViewProps> = ({ inVouchers, onOpenVouc
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredClients.map((client) => {
-          // Find vouchers from this client
+          // Find vouchers from this client (only Credit vouchers should be linked here)
           const clientVouchers = inVouchers.filter((v) =>
-            v.receivedFrom.toLowerCase().includes(client.name.toLowerCase().slice(0, 8))
+            v.voucherType === 'IN(Credit)' && (v as CreditVoucher).customerName.toLowerCase().includes(client.name.toLowerCase().slice(0, 8))
           );
           const totalReceived = clientVouchers.reduce((acc, v) => acc + v.amount, 0);
 

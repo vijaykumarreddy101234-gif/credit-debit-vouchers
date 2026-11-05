@@ -44,8 +44,8 @@ export const DocumentRegister: React.FC<DocumentRegisterProps> = ({
           list.push({
             ...att,
             voucherNo: v.voucherNo,
-            voucherDate: v.voucherDate,
-            voucherAccount: v.accountName,
+            voucherDate: v.date,
+            voucherAccount: v.accountantName || '-',
             voucherAmount: v.amount,
             voucher: v,
           });

@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   Receipt,
   Users,
+  PlusCircle,
   Briefcase,
   Layers,
   Settings,
@@ -19,12 +20,11 @@ import {
 
 export type ActiveTab =
   | 'dashboard'
-  | 'in-entry'
-  | 'in-register'
-  | 'out-entry'
-  | 'out-register'
+  | 'credit-entry'
+  | 'credit-register'
+  | 'debit-entry'
+  | 'debit-register'
   | 'docs'
-  | 'accounts'
   | 'crm-leads';
 
 interface SidebarProps {
@@ -33,6 +33,8 @@ interface SidebarProps {
   inCount: number;
   outCount: number;
   docsCount: number;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -41,107 +43,148 @@ export const Sidebar: React.FC<SidebarProps> = ({
   inCount,
   outCount,
   docsCount,
+  isOpen = false,
+  onClose,
 }) => {
+  const handleItemClick = (tab: ActiveTab) => {
+    onSelectTab(tab);
+    if (onClose) onClose();
+  };
+
   return (
-    <aside className="no-print w-64 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col shrink-0 h-full overflow-y-auto select-none">
+    <>
+      {/* Mobile / Tablet Backdrop */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 bg-slate-950/70 z-40 lg:hidden backdrop-blur-xs transition-opacity duration-300"
+        />
+      )}
+
+      {/* Sidebar Container */}
+      <aside
+        className={`no-print fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col shrink-0 h-full overflow-y-auto select-none transition-transform duration-300 ease-in-out ${
+          isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        {/* Mobile Close Button Header */}
+        <div className="lg:hidden p-3 border-b border-slate-800 flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Navigation Menu</span>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            <span className="sr-only">Close sidebar</span>
+            ✕
+          </button>
+        </div>
       
-      {/* Voucher Desk Submenu Section */}
-      <div className="p-4 flex-1 space-y-6">
-        
-        {/* Module Header */}
-        <div>
-          <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-            <span>Voucher Desk</span>
-            <span className="bg-blue-600/20 text-blue-400 px-1.5 py-0.5 rounded text-[9px] font-mono">
-              ACTIVE
-            </span>
-          </div>
+      {/* 1. DASHBOARD */}
+      <div className="p-4 border-b border-slate-800/50">
+        <button
+          type="button"
+          onClick={() => handleItemClick('dashboard')}
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            activeTab === 'dashboard'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+          }`}
+        >
+          <LayoutDashboard className="w-4 h-4" />
+          <span>General Dashboard</span>
+        </button>
+      </div>
 
-          <nav className="space-y-1">
-            {/* 1. Dashboard */}
-            <button
-              type="button"
-              onClick={() => onSelectTab('dashboard')}
-              className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'hover:bg-slate-800/80 text-slate-300 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <LayoutDashboard className="w-4 h-4" />
-                <span>Dashboard</span>
-              </div>
-            </button>
-
-            {/* 2. Voucher Entry (IN / OUT) */}
-            <button
-              type="button"
-              onClick={() => onSelectTab('in-entry')}
-              className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'in-entry'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'hover:bg-slate-800/80 text-slate-300 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-4 h-4 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-black">
-                  ±
-                </div>
-                <span>Voucher Entry (IN / OUT)</span>
-              </div>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono">
-                + New
-              </span>
-            </button>
-
-            {/* 3. IN Voucher Register */}
-            <button
-              type="button"
-              onClick={() => onSelectTab('in-register')}
-              className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'in-register'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'hover:bg-slate-800/80 text-slate-300 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <FileText className="w-4 h-4 text-emerald-400" />
-                <span>IN Voucher Register</span>
-              </div>
-              <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono font-bold">
-                {inCount}
-              </span>
-            </button>
-
-            {/* 4. OUT Voucher Register */}
-            <button
-              type="button"
-              onClick={() => onSelectTab('out-register')}
-              className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'out-register'
-                  ? 'bg-rose-600 text-white shadow-xs'
-                  : 'hover:bg-slate-800/80 text-slate-300 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <FileText className="w-4 h-4 text-rose-400" />
-                <span>OUT Voucher Register</span>
-              </div>
-              <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono font-bold">
-                {outCount}
-              </span>
-            </button>
-
-            {/* Divider */}
-            <div className="pt-2 pb-1 px-3">
-              <div className="border-t border-slate-800" />
+      {/* 2. IN VOUCHER DESK (CREDIT) */}
+      <div className="p-4 space-y-2">
+        <div className="px-3 text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-between opacity-80">
+          <span>Credit Desk (IN)</span>
+          <ArrowDownLeft className="w-3 h-3" />
+        </div>
+        <nav className="space-y-1">
+          <button
+            type="button"
+            onClick={() => handleItemClick('credit-entry')}
+            className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'credit-entry'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-emerald-400'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <PlusCircle className="w-4 h-4" />
+              <span>Credit Entry</span>
             </div>
+            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 py-0.5 rounded font-bold uppercase">New</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleItemClick('credit-register')}
+            className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'credit-register'
+                ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-emerald-400'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <FileText className="w-4 h-4" />
+              <span>IN Register</span>
+            </div>
+            <span className="text-[10px] font-bold opacity-60 font-mono">{inCount}</span>
+          </button>
+        </nav>
+      </div>
 
-            {/* 6. Document Register */}
+      {/* 3. OUT VOUCHER DESK (DEBIT) */}
+      <div className="p-4 space-y-2">
+        <div className="px-3 text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center justify-between opacity-80">
+          <span>Debit Desk (OUT)</span>
+          <ArrowUpRight className="w-3 h-3" />
+        </div>
+        <nav className="space-y-1">
+          <button
+            type="button"
+            onClick={() => handleItemClick('debit-entry')}
+            className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'debit-entry'
+                ? 'bg-rose-600 text-white shadow-md'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-rose-400'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <PlusCircle className="w-4 h-4" />
+              <span>Debit Entry</span>
+            </div>
+            <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1 py-0.5 rounded font-bold uppercase">New</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleItemClick('debit-register')}
+            className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'debit-register'
+                ? 'bg-rose-600/20 text-rose-400 border border-rose-500/30'
+                : 'hover:bg-slate-800 text-slate-400 hover:text-rose-400'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <FileText className="w-4 h-4" />
+              <span>OUT Register</span>
+            </div>
+            <span className="text-[10px] font-bold opacity-60 font-mono">{outCount}</span>
+          </button>
+        </nav>
+      </div>
+
+      {/* 4. OTHER MODULES */}
+      <div className="p-4 flex-1 space-y-6">
+        <div>
+          <div className="px-3 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            Enterprise Assets
+          </div>
+          <nav className="space-y-1">
             <button
               type="button"
-              onClick={() => onSelectTab('docs')}
+              onClick={() => handleItemClick('docs')}
               className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
                 activeTab === 'docs'
                   ? 'bg-purple-600 text-white shadow-xs'
@@ -150,69 +193,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <FolderOpen className="w-4 h-4 text-purple-400" />
-                <span>Document Register</span>
+                <span>Document Center</span>
               </div>
-              <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono">
-                {docsCount}
-              </span>
+              <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono">{docsCount}</span>
             </button>
           </nav>
         </div>
-
-        {/* Existing CRM Modules (Preserved & Visible) */}
-        <div>
-          <div className="px-3 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-            Raviraja Enterprise Modules
-          </div>
-
-          <nav className="space-y-1 text-xs">
-            <button
-              type="button"
-              onClick={() => onSelectTab('accounts')}
-              className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
-                activeTab === 'accounts'
-                  ? 'bg-slate-800 text-white font-semibold'
-                  : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Building2 className="w-4 h-4" />
-                <span>Chart of Accounts</span>
-              </div>
-              <span className="text-[10px] text-slate-500 font-mono">Ledger</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onSelectTab('crm-leads')}
-              className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors ${
-                activeTab === 'crm-leads'
-                  ? 'bg-slate-800 text-white font-semibold'
-                  : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Users className="w-4 h-4" />
-                <span>Clients & Debtors</span>
-              </div>
-              <span className="text-[10px] text-slate-500">Party Desk</span>
-            </button>
-          </nav>
-        </div>
-
       </div>
 
-      {/* Corporate Compliance Stamp at Bottom */}
+      {/* Compliance Stamp */}
       <div className="p-4 border-t border-slate-800 bg-slate-950/60 text-[11px] text-slate-400 space-y-1">
         <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           <span>Statutory Audited</span>
         </div>
-        <p className="text-[10px] text-slate-400">
-          GST / TDS compliant voucher desk. ISO 9001:2015 certified company.
+        <p className="text-[10px] leading-relaxed">
+          GST Compliant ERP Module. Raviraja Industries Pvt Ltd.
         </p>
       </div>
-
     </aside>
+    </>
   );
 };
