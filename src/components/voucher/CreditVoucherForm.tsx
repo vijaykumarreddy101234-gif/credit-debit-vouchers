@@ -1,38 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  FileText,
-  Calendar,
-  Hash,
-  User,
-  CreditCard,
-  IndianRupee,
+  UploadCloud,
   Save,
   Printer,
-  RotateCcw,
+  FileSpreadsheet,
+  Edit,
+  Trash2,
   X,
-  PlusCircle,
-  Building,
   CheckCircle2,
-  AlertCircle,
-  ShieldCheck,
-  Briefcase,
-  FileUp,
-  Paperclip
+  Paperclip,
+  Check,
+  Plus,
+  Settings2,
+  Layers
 } from 'lucide-react';
 import {
   CreditVoucher,
   ReceiptMode,
+  VoucherAttachment,
+  VoucherLineItem,
   UserProfile,
-  VoucherStatus,
-  VoucherAttachment
+  VoucherStatus
 } from '../../types/voucher';
 import { numberToIndianWords, formatIndianCurrency } from '../../utils/numberToWordsIndian';
 import { voucherStorage } from '../../utils/voucherStorage';
+import { generateVoucherPdf } from '../../utils/pdfGenerator';
+import { exportInVouchersToExcel } from '../../utils/excelExport';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface CreditVoucherFormProps {
   initialVoucher?: CreditVoucher | null;
   currentUser: UserProfile;
   onSaveSuccess: (savedVoucher: CreditVoucher, andPrint?: boolean) => void;
+  onDeleteSuccess?: (voucherNo: string) => void;
   onCancel: () => void;
   onSwitchToDebit?: () => void;
 }
@@ -41,52 +41,133 @@ export const CreditVoucherForm: React.FC<CreditVoucherFormProps> = ({
   initialVoucher,
   currentUser,
   onSaveSuccess,
+  onDeleteSuccess,
   onCancel,
   onSwitchToDebit,
 }) => {
   const isEditing = Boolean(initialVoucher?.id);
-  const canApprove = currentUser.role === 'Admin' || currentUser.role === 'Authorized Accounts Manager';
 
-  // Form State
-  const [voucherNo, setVoucherNo] = useState<string>(initialVoucher?.voucherNo || '');
+  // Field 1: Voucher No.
+  const [voucherNo, setVoucherNo] = useState<string>(
+    initialVoucher?.voucherNo || ''
+  );
+
+  // Field 2: Date
   const [date, setDate] = useState<string>(
     initialVoucher?.date || new Date().toISOString().split('T')[0]
   );
-  const [accountantName, setAccountantName] = useState<string>(initialVoucher?.accountantName || '');
-  const [referenceDate, setReferenceDate] = useState<string>(initialVoucher?.referenceDate || '');
-  const [personName, setPersonName] = useState<string>(initialVoucher?.personName || '');
-  const [customerGstin, setCustomerGstin] = useState<string>(initialVoucher?.customerGstin || '');
-  const [referenceDetails, setReferenceDetails] = useState<string>(initialVoucher?.referenceDetails || '');
-  const [noteReason, setNoteReason] = useState<string>(initialVoucher?.noteReason || '');
+  const [isDateLocked, setIsDateLocked] = useState<boolean>(!isEditing);
 
-  const [receiptMode, setReceiptMode] = useState<ReceiptMode>(initialVoucher?.receiptMode || 'Bank');
-  const [amount, setAmount] = useState<string>(initialVoucher?.amount ? String(initialVoucher.amount) : '');
-  const [amountInWords, setAmountInWords] = useState<string>(initialVoucher?.amountInWords || '');
-  
-  const [customerName, setCustomerName] = useState<string>(initialVoucher?.customerName || '');
-  const [receiptType, setReceiptType] = useState<CreditVoucher['receiptType']>(
-    initialVoucher?.receiptType || 'Party Payment'
+  // Field 3: Customer Name
+  const [customerName, setCustomerName] = useState<string>(
+    initialVoucher?.customerName || ''
   );
-  const [description, setDescription] = useState<string>(initialVoucher?.description || '');
-  const [invoiceNumber, setInvoiceNumber] = useState<string>(initialVoucher?.invoiceNumber || '');
-  const [invoiceDate, setInvoiceDate] = useState<string>(initialVoucher?.invoiceDate || '');
-  const [approvedBy, setApprovedBy] = useState<string>(initialVoucher?.approvedBy || '');
+  const [customerList, setCustomerList] = useState<string[]>(() =>
+    voucherStorage.getCustomers()
+  );
+
+  // Field 4: Source
+  const [source, setSource] = useState<string>(
+    initialVoucher?.source || initialVoucher?.receiptType || 'Sales'
+  );
+  const [sourceOptions, setSourceOptions] = useState<string[]>([
+    'Sales',
+    'Others',
+    'Advance Payment',
+    'Consulting'
+  ]);
+
+  // Field 5: Invoice No.
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(
+    initialVoucher?.invoiceNumber || ''
+  );
+
+  // Attached Document / Photo
+  const [attachments, setAttachments] = useState<VoucherAttachment[]>(
+    initialVoucher?.attachments || []
+  );
+
+  // Field 6: Received Amount (₹)
+  const [amount, setAmount] = useState<string>(
+    initialVoucher?.amount ? String(initialVoucher.amount) : ''
+  );
+  const [amountInWords, setAmountInWords] = useState<string>(
+    initialVoucher?.amountInWords || ''
+  );
+
+  // Advanced Line Items / Breakdown (Add items)
+  const [items, setItems] = useState<VoucherLineItem[]>(
+    initialVoucher?.items || []
+  );
+  const [showItemsTable, setShowItemsTable] = useState<boolean>(
+    Boolean(initialVoucher?.items && initialVoucher.items.length > 0)
+  );
+  const [newItemName, setNewItemName] = useState<string>('');
+  const [newItemQty, setNewItemQty] = useState<string>('1');
+  const [newItemRate, setNewItemRate] = useState<string>('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+  // Field 7: Payment Mode
+  const [receiptMode, setReceiptMode] = useState<ReceiptMode>(
+    initialVoucher?.receiptMode || 'Cash'
+  );
+
+  // Field 8: Reason
+  const [reason, setReason] = useState<string>(
+    initialVoucher?.description || initialVoucher?.noteReason || ''
+  );
+
+  // Field 9: Approved Person
+  const [approvedPerson, setApprovedPerson] = useState<string>(
+    initialVoucher?.approvedBy || 'Lakshmi Narayana'
+  );
+
+  // Field 10: Receiver Person
+  const [receiverPerson, setReceiverPerson] = useState<string>(
+    initialVoucher?.receivedBy || currentUser.name || 'Suresh Kumar'
+  );
+  const [receiverList, setReceiverList] = useState<string[]>(() =>
+    voucherStorage.getReceivers()
+  );
+
   const [approvalStatus, setApprovalStatus] = useState<VoucherStatus>(
     initialVoucher?.approvalStatus || 'Pending'
   );
-  const [receivedBy, setReceivedBy] = useState<string>(initialVoucher?.receivedBy || currentUser.name);
-  const [remarks, setRemarks] = useState<string>(initialVoucher?.remarks || '');
-  const [attachments, setAttachments] = useState<VoucherAttachment[]>(initialVoucher?.attachments || []);
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  // Master Cell Management Modal (Add, Edit, Delete right on cell)
+  const [manageCellType, setManageCellType] = useState<
+    'customer' | 'source' | 'receiver' | null
+  >(null);
+  const [newItemInput, setNewItemInput] = useState<string>('');
+  const [editingMasterItem, setEditingMasterItem] = useState<{
+    original: string;
+    current: string;
+  } | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
+  const [showClearModal, setShowClearModal] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isEditing) {
       setVoucherNo(voucherStorage.getNextCreditVoucherNumber());
     }
   }, [isEditing]);
+
+  // Recalculate amount when items change (if items table is active)
+  useEffect(() => {
+    if (showItemsTable) {
+      if (items.length > 0) {
+        const sum = items.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
+        setAmount(String(sum));
+      } else {
+        setAmount('0');
+      }
+    }
+  }, [items, showItemsTable]);
 
   useEffect(() => {
     const num = parseFloat(amount);
@@ -97,278 +178,481 @@ export const CreditVoucherForm: React.FC<CreditVoucherFormProps> = ({
     }
   }, [amount]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const newAttachment: VoucherAttachment = {
-        id: `att-${Date.now()}`,
-        name: file.name,
-        type: file.type.startsWith('image/') ? 'Photo' : 'Invoice',
-        size: file.size,
-        mimeType: file.type,
-        dataUrl: reader.result as string,
-        uploadedAt: new Date().toISOString(),
-      };
-      setAttachments((prev) => [...prev, newAttachment]);
-    };
-    reader.readAsDataURL(file);
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    if (!date) newErrors.date = 'Date is required';
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      newErrors.amount = 'Valid positive amount is required';
+  // Line Item Handlers
+  const handleAddOrUpdateItem = () => {
+    if (!newItemName.trim()) {
+      showToast('Please enter item / particulars name');
+      return;
     }
-    if (!customerName.trim()) newErrors.customerName = 'Customer Name is required';
-    if (!description.trim()) newErrors.description = 'Purpose / Description is required';
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+    const qty = parseFloat(newItemQty) || 1;
+    const rate = parseFloat(newItemRate) || 0;
+    const itemAmount = rate > 0 ? qty * rate : (parseFloat(newItemRate) || 0);
 
-  const handleSave = async (andPrint: boolean = false) => {
-    if (!validateForm()) return;
-
-    // Check for documents if user wants to print
-    if (andPrint && attachments.length === 0) {
-      const confirmPrintWithoutDocs = window.confirm(
-        'No documents or photos have been uploaded. Do you want to upload a document before printing?'
+    if (editingItemId) {
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === editingItemId
+            ? { ...it, name: newItemName.trim(), qty, rate, amount: itemAmount }
+            : it
+        )
       );
-      if (confirmPrintWithoutDocs) {
-        // Scroll to upload section and don't proceed with save
-        fileInputRef.current?.scrollIntoView({ behavior: 'smooth' });
-        return;
-      }
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      const voucherData: Partial<CreditVoucher> = {
-        id: initialVoucher?.id,
-        voucherNo,
-        date,
-        accountantName,
-        referenceDate,
-        personName,
-        customerGstin,
-        referenceDetails,
-        noteReason,
-        receiptMode,
-        amount: parseFloat(amount),
-        amountInWords,
-        customerName,
-        receiptType,
-        description,
-        invoiceNumber,
-        invoiceDate,
-        approvedBy: approvalStatus === 'Approved' ? (approvedBy || currentUser.name) : approvedBy,
-        approvalStatus,
-        receivedBy,
-        remarks,
-        attachments,
+      setEditingItemId(null);
+      showToast('Item updated');
+    } else {
+      const newItem: VoucherLineItem = {
+        id: `item-${Date.now()}`,
+        name: newItemName.trim(),
+        qty,
+        rate,
+        amount: itemAmount,
       };
+      setItems((prev) => [...prev, newItem]);
+      showToast('Item added');
+    }
+    setNewItemName('');
+    setNewItemQty('1');
+    setNewItemRate('');
+  };
 
+  const handleEditItem = (item: VoucherLineItem) => {
+    setEditingItemId(item.id);
+    setNewItemName(item.name);
+    setNewItemQty(item.qty ? String(item.qty) : '1');
+    setNewItemRate(item.rate ? String(item.rate) : String(item.amount));
+  };
+
+  const handleDeleteItem = (itemId: string) => {
+    setItems((prev) => prev.filter((it) => it.id !== itemId));
+    showToast('Item deleted');
+  };
+
+  // Master Cell Management Handlers (Add, Edit, Delete)
+  const handleAddMasterItem = () => {
+    if (!newItemInput.trim()) return;
+    const val = newItemInput.trim();
+    if (manageCellType === 'customer') {
+      const updated = voucherStorage.addCustomer(val);
+      setCustomerList(updated);
+      setCustomerName(val);
+    } else if (manageCellType === 'source') {
+      if (!sourceOptions.includes(val)) {
+        setSourceOptions((prev) => [...prev, val]);
+      }
+      setSource(val);
+    } else if (manageCellType === 'receiver') {
+      const updated = voucherStorage.addReceiver(val);
+      setReceiverList(updated);
+      setReceiverPerson(val);
+    }
+    setNewItemInput('');
+    showToast(`Added: ${val}`);
+  };
+
+  const handleSaveEditedMasterItem = () => {
+    if (!editingMasterItem || !editingMasterItem.current.trim()) return;
+    const oldVal = editingMasterItem.original;
+    const newVal = editingMasterItem.current.trim();
+
+    if (manageCellType === 'customer') {
+      const updated = voucherStorage.updateCustomer(oldVal, newVal);
+      setCustomerList(updated);
+      if (customerName === oldVal) setCustomerName(newVal);
+    } else if (manageCellType === 'source') {
+      setSourceOptions((prev) =>
+        prev.map((s) => (s === oldVal ? newVal : s))
+      );
+      if (source === oldVal) setSource(newVal);
+    } else if (manageCellType === 'receiver') {
+      const updated = voucherStorage.updateReceiver(oldVal, newVal);
+      setReceiverList(updated);
+      if (receiverPerson === oldVal) setReceiverPerson(newVal);
+    }
+    setEditingMasterItem(null);
+    showToast(`Updated to: ${newVal}`);
+  };
+
+  const handleDeleteMasterItem = (item: string) => {
+    if (manageCellType === 'customer') {
+      const updated = voucherStorage.deleteCustomer(item);
+      setCustomerList(updated);
+      if (customerName === item) setCustomerName(updated[0] || '');
+    } else if (manageCellType === 'source') {
+      setSourceOptions((prev) => prev.filter((s) => s !== item));
+      if (source === item) setSource('Sales');
+    } else if (manageCellType === 'receiver') {
+      const updated = voucherStorage.deleteReceiver(item);
+      setReceiverList(updated);
+      if (receiverPerson === item) setReceiverPerson(updated[0] || '');
+    }
+    showToast(`Deleted: ${item}`);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const newAttachment: VoucherAttachment = {
+          id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          name: file.name,
+          type: file.type.startsWith('image/') ? 'Photo' : 'Invoice',
+          size: file.size,
+          mimeType: file.type,
+          dataUrl: reader.result as string,
+          uploadedAt: new Date().toISOString(),
+        };
+        setAttachments((prev) => [...prev, newAttachment]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      errs.amount = 'Please enter valid received amount';
+    }
+    if (!customerName.trim()) {
+      errs.customerName = 'Please select or enter customer name';
+    }
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const buildVoucher = (): Partial<CreditVoucher> => {
+    return {
+      id: initialVoucher?.id,
+      voucherNo: voucherNo.trim() || voucherStorage.getNextCreditVoucherNumber(),
+      date,
+      receiptMode,
+      source,
+      receiptType: source === 'Sales' ? 'Sales' : 'Party/Customer',
+      customerName: customerName.trim(),
+      amount: parseFloat(amount) || 0,
+      amountInWords: amountInWords || (amount ? numberToIndianWords(parseFloat(amount)) : ''),
+      invoiceNumber: invoiceNumber.trim(),
+      description: reason.trim() || 'Payment receipt',
+      noteReason: reason.trim(),
+      approvedBy: approvedPerson.trim(),
+      approvalStatus,
+      receivedBy: receiverPerson.trim(),
+      attachments,
+      items: items.length > 0 ? items : undefined,
+    };
+  };
+
+  const handleSave = (andPrint: boolean = false) => {
+    if (!validate()) {
+      showToast('Please enter Customer Name and Received Amount before saving.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const voucherData = buildVoucher();
       const saved = voucherStorage.saveCreditVoucher(voucherData);
       onSaveSuccess(saved, andPrint);
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      showToast(`Save error: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleDeleteVoucher = () => {
+    if (isEditing && initialVoucher?.id) {
+      setShowDeleteModal(true);
+    } else {
+      setShowClearModal(true);
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (initialVoucher?.id) {
+      try {
+        voucherStorage.deleteCreditVoucher(initialVoucher.id, currentUser);
+        showToast(`Voucher ${initialVoucher.voucherNo} deleted`);
+        if (onDeleteSuccess) {
+          onDeleteSuccess(initialVoucher.voucherNo);
+        } else {
+          onCancel();
+        }
+      } catch (e: any) {
+        showToast(`Delete error: ${e.message}`);
+      }
+    }
+  };
+
+  const handleConfirmClear = () => {
+    setAmount('');
+    setAmountInWords('');
+    setCustomerName('');
+    setReason('');
+    setInvoiceNumber('');
+    setAttachments([]);
+    setItems([]);
+    showToast('Form fields cleared');
+  };
+
+  const handleExportExcel = () => {
+    if (!validate()) return;
+    const v = buildVoucher() as CreditVoucher;
+    exportInVouchersToExcel([v], `${v.voucherNo || 'Credit_Voucher'}.csv`);
+  };
+
   return (
-    <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6 pb-12 px-1 sm:px-2">
-      {/* Header */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-white to-emerald-50/30">
-        <div>
-          <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs uppercase tracking-widest mb-1">
-            <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-            Module: IN – Credit Voucher
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            {isEditing ? 'Edit Credit Voucher' : 'New Credit Voucher Entry'}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 font-medium font-serif italic">Record incoming receipts, sales payments, and customer advances</p>
+    <div className="max-w-2xl mx-auto py-4 px-2 sm:px-4">
+      
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-16 right-4 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>{toastMessage}</span>
         </div>
-        <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-          <div className="text-left sm:text-right">
-            <span className="text-[10px] text-slate-400 block font-bold uppercase">Sequence No</span>
-            <span className="font-mono text-base sm:text-lg font-black text-emerald-700">{voucherNo || '...'}</span>
-          </div>
-          <button onClick={onCancel} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
-            <X className="w-5 h-5 sm:w-6 sm:h-6" />
-          </button>
-        </div>
-      </div>
+      )}
 
-      <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+      {/* Main Form Box matching image_6320ea6b.png */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         
-        {/* Left Column: Basic Details */}
-        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
-            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
-              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">1</div>
-                A. Voucher Details
-              </h3>
-              <span className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full text-[10px] font-black uppercase tracking-tight">IN(Credit) Voucher</span>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-tighter">
-                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                  1. Voucher Date *
-                </label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all px-4 py-2.5"
-                  required
-                />
-                <span className="text-[9px] text-slate-400 mt-1 block">Default: Today's Date</span>
-              </div>
+        {/* Header */}
+        <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+            title="Cancel"
+          >
+            ← Back
+          </button>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-tighter">
-                  <FileText className="w-3.5 h-3.5 text-blue-600" />
-                  2. Voucher Type *
-                </label>
-                <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200">
-                  <button
-                    type="button"
-                    className="flex-1 py-1.5 text-[9px] font-black uppercase rounded-lg bg-emerald-600 text-white shadow-sm transition-all"
-                  >
-                    IN(Credit)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onSwitchToDebit) {
-                        onSwitchToDebit();
-                      }
-                    }}
-                    className="flex-1 py-1.5 text-[9px] font-black uppercase rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
-                    title="Switch to OUT (Debit) Voucher"
-                  >
-                    OUT(Debit)
-                  </button>
-                </div>
-                <span className="text-[9px] text-slate-400 mt-1 block">Click to switch between IN & OUT voucher</span>
-              </div>
+          <h2 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight text-center">
+            CREDIT VOUCHER (IN)
+          </h2>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-tighter text-blue-700">
-                  <Hash className="w-3.5 h-3.5" />
-                  3. Voucher Number *
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={voucherNo}
-                    readOnly
-                    className="w-full text-sm font-black text-emerald-700 rounded-xl border-emerald-200 bg-emerald-50/50 px-4 py-2.5"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[8px] font-black bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded">AUTO GENERATED</span>
-                </div>
+          {onSwitchToDebit ? (
+            <button
+              type="button"
+              onClick={onSwitchToDebit}
+              className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 cursor-pointer transition-colors"
+              title="Switch to Debit Voucher (OUT)"
+            >
+              Switch to OUT
+            </button>
+          ) : (
+            <span className="w-8" />
+          )}
+        </div>
+
+        <div className="p-4 sm:p-6 space-y-4">
+          
+          {/* Row 1: 1. Voucher No. & 2. Date */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* 1. Voucher No. */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                1. Voucher No.
+              </label>
+              <div className="w-full h-14 rounded-lg border border-slate-200 bg-slate-50/40 p-2.5 flex flex-col justify-center">
+                <span className="text-xs font-bold text-emerald-700 tracking-wide block leading-tight">
+                  AUTO GENERATED
+                </span>
+                <span className="text-[10px] text-slate-400 block leading-tight">
+                  Read only ({voucherNo || 'CV-0001'})
+                </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-tighter">
-                  <User className="w-3.5 h-3.5 text-blue-600" />
-                  4. Accountant Name *
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Enter Accountant Name..."
-                    value={accountantName}
-                    onChange={(e) => setAccountantName(e.target.value)}
-                    className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 px-4 py-2.5"
-                    required
-                  />
-                  <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-600 hover:text-blue-800">
-                    <PlusCircle className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-tighter">
-                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                  5. Reference Date
-                </label>
-                <input
-                  type="date"
-                  value={referenceDate}
-                  onChange={(e) => setReferenceDate(e.target.value)}
-                  className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2.5"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-tighter">Person Name:</label>
-                <input
-                  type="text"
-                  value={personName}
-                  onChange={(e) => setPersonName(e.target.value)}
-                  className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2.5"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-tighter">Customer GSTIN:</label>
-                <input
-                  type="text"
-                  value={customerGstin}
-                  onChange={(e) => setCustomerGstin(e.target.value)}
-                  className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2.5"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-tighter">Reference Details:</label>
-                <input
-                  type="text"
-                  placeholder="Invoice / Bill / Supporting Documents"
-                  value={referenceDetails}
-                  onChange={(e) => setReferenceDetails(e.target.value)}
-                  className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2.5"
-                />
-              </div>
-
-              {/* Added Document/Photo upload here as requested */}
-              <div className="space-y-3">
-                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,application/pdf" />
+            {/* 2. Date */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                <span>2. Date</span>
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full py-6 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/30 transition-all group"
+                  onClick={() => setIsDateLocked(!isDateLocked)}
+                  className="text-[10px] text-blue-600 hover:underline"
                 >
-                  <FileUp className="w-8 h-8 group-hover:scale-110 transition-transform text-blue-500" />
-                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600">+ Add Document or Photo</span>
+                  {isDateLocked ? 'Change' : 'Lock'}
                 </button>
+              </label>
+              <div className="w-full h-14 rounded-lg border border-slate-200 bg-slate-50/40 px-3 py-2 flex flex-col justify-center">
+                {isDateLocked ? (
+                  <>
+                    <span className="text-xs font-bold text-slate-800 font-mono">
+                      {date}
+                    </span>
+                    <span className="text-[10px] text-slate-400 leading-tight">
+                      Default today
+                    </span>
+                  </>
+                ) : (
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full text-xs font-bold text-slate-800 bg-transparent border-none p-0 focus:ring-0"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: 3. Customer Name (Full Width) with + Add Customer & Edit/Del */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-800">
+                3. Customer Name
+              </label>
+              <button
+                type="button"
+                onClick={() => setManageCellType('customer')}
+                className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-0.5 cursor-pointer"
+                title="Manage Customer List (Add, Edit, Delete)"
+              >
+                <Settings2 className="w-3 h-3" />
+                <span>Edit / Manage Customers</span>
+              </button>
+            </div>
+
+            <input
+              type="text"
+              list="creditCustomerList"
+              placeholder="Select Customer Name"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className={`w-full h-11 text-xs rounded-lg border ${
+                errors.customerName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200'
+              } bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400`}
+            />
+            <datalist id="creditCustomerList">
+              {customerList.map((c, idx) => (
+                <option key={idx} value={c} />
+              ))}
+            </datalist>
+            
+            <div className="flex justify-end gap-2 mt-1.5">
+              <button
+                type="button"
+                onClick={() => setManageCellType('customer')}
+                className="px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-full transition-colors cursor-pointer"
+              >
+                + Add Customer
+              </button>
+            </div>
+            {errors.customerName && (
+              <span className="text-[10px] text-rose-600 font-bold mt-1 block">
+                {errors.customerName}
+              </span>
+            )}
+          </div>
+
+          {/* Row 3: 4. Source (Left) & 5. Invoice No. + Upload (Right) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            {/* 4. Source */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  4. Source
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setManageCellType('source')}
+                  className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer"
+                  title="Add, Edit or Delete Sources"
+                >
+                  <Settings2 className="w-3 h-3" />
+                  <span>Edit/Add</span>
+                </button>
+              </div>
+
+              <div className="w-full rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                {sourceOptions.map((opt) => (
+                  <label
+                    key={opt}
+                    className="flex items-center gap-2.5 text-xs text-slate-700 font-medium cursor-pointer hover:text-slate-900 select-none"
+                  >
+                    <input
+                      type="radio"
+                      name="creditSource"
+                      value={opt}
+                      checked={source === opt}
+                      onChange={() => setSource(opt)}
+                      className="w-3.5 h-3.5 text-slate-800 border-slate-300 focus:ring-slate-500"
+                    />
+                    <span>{opt}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setManageCellType('source')}
+                  className="px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-full transition-colors cursor-pointer"
+                >
+                  + Add Source
+                </button>
+              </div>
+            </div>
+
+            {/* Right Column: 5. Invoice No. & + Add Document / Photo */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  5. Invoice No.
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Invoice Number"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  className="w-full h-11 text-xs rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono"
+                />
+              </div>
+
+              <div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  multiple
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                />
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-18 rounded-lg border border-slate-200 hover:border-slate-400 bg-white hover:bg-slate-50/50 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors p-2 text-center"
+                >
+                  <UploadCloud className="w-5 h-5 text-slate-600" />
+                  <span className="text-xs font-bold text-slate-800">
+                    + Add Document / Photo
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    PDF / JPG / PNG
+                  </span>
+                </div>
 
                 {attachments.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="mt-2 space-y-1">
                     {attachments.map((att) => (
-                      <div key={att.id} className="flex items-center justify-between p-2 bg-white rounded-xl border border-slate-100 shadow-xs">
-                        <div className="flex items-center gap-2 truncate">
-                          <Paperclip className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="text-[10px] font-bold text-slate-700 truncate">{att.name}</span>
-                        </div>
-                        <button onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))} className="text-rose-500 hover:text-rose-700 p-1">
+                      <div
+                        key={att.id}
+                        className="flex items-center justify-between p-1.5 bg-slate-50 rounded border border-slate-200 text-[10px]"
+                      >
+                        <span className="truncate max-w-[150px] font-medium text-slate-700">
+                          {att.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                          className="text-rose-500 hover:text-rose-700 p-0.5"
+                        >
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -378,186 +662,438 @@ export const CreditVoucherForm: React.FC<CreditVoucherFormProps> = ({
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-tighter">Note / Reason:</label>
-              <textarea
-                rows={2}
-                value={noteReason}
-                onChange={(e) => setNoteReason(e.target.value)}
-                className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2 resize-none"
-                placeholder="Reason for receipt..."
-              />
-            </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-5">
-            <h3 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-              <div className="w-6 h-6 rounded bg-emerald-600 text-white flex items-center justify-center text-[10px] font-black">2</div>
-              B. Payment Details
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <IndianRupee className="w-3.5 h-3.5 text-emerald-600" />
-                    Amount (₹) *
-                  </span>
-                  {amount && <span className="text-[10px] font-black text-emerald-700">{formatIndianCurrency(amount)}</span>}
+          {/* Row 4: 6. Received Amount (₹) & 7. Payment Mode */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* 6. Received Amount (₹) + Optional Add Items toggle */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  6. Received Amount (₹)
                 </label>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full text-lg font-black text-slate-900 rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all px-4 py-2.5"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Amount in Words</label>
-                <div className="w-full min-h-[46px] p-3 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/30 text-xs font-bold text-emerald-900 italic flex items-center">
-                  {amountInWords ? `"${amountInWords}"` : 'Enter amount to see words...'}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Receipt Mode *</label>
-                <select
-                  value={receiptMode}
-                  onChange={(e) => setReceiptMode(e.target.value as ReceiptMode)}
-                  className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2.5"
+                <button
+                  type="button"
+                  onClick={() => setShowItemsTable(!showItemsTable)}
+                  className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1 cursor-pointer"
+                  title="Add itemized breakdown rows"
                 >
-                  <option value="Cash">Cash</option>
-                  <option value="Bank">Bank Transfer</option>
-                  <option value="Cheque">Cheque</option>
-                  <option value="UPI">UPI / Digital</option>
-                  <option value="Other">Other</option>
-                </select>
+                  <Layers className="w-3 h-3" />
+                  <span>{showItemsTable ? 'Hide Items' : '+ Add Items'}</span>
+                </button>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Customer Name *</label>
-                <input
-                  type="text"
-                  placeholder="Enter customer name..."
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2.5"
-                  required
-                />
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Description / Receipt Purpose *</label>
-              <textarea
-                rows={3}
-                placeholder="Details of the receipt transaction..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2.5 resize-none"
-                required
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Approvals & Sign-Off */}
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-5">
-            <h3 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-              <div className="w-6 h-6 rounded bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">3</div>
-              C. Sign-Off Details
-            </h3>
-            
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-tighter">Approved By:</label>
               <input
-                type="text"
-                placeholder="Authorized sign-off name"
-                value={approvedBy}
-                readOnly={!canApprove}
-                onChange={(e) => setApprovedBy(e.target.value)}
-                className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2"
+                type="number"
+                step="any"
+                placeholder="Enter Received Amount"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className={`w-full h-11 text-xs rounded-lg border ${
+                  errors.amount ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200'
+                } bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono font-bold`}
               />
+              {amountInWords && (
+                <span className="text-[10px] text-emerald-800 font-semibold italic mt-1 block leading-tight">
+                  "{amountInWords}"
+                </span>
+              )}
+              {errors.amount && (
+                <span className="text-[10px] text-rose-600 font-bold mt-1 block">
+                  {errors.amount}
+                </span>
+              )}
             </div>
 
+            {/* 7. Payment Mode */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-tighter">Approval Status:</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['Pending', 'Approved', 'Rejected'] as VoucherStatus[]).map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    disabled={!canApprove && status !== 'Pending'}
-                    onClick={() => setApprovalStatus(status)}
-                    className={`py-2 text-[8px] font-black uppercase rounded-lg border transition-all ${
-                      approvalStatus === status
-                        ? status === 'Approved' ? 'bg-emerald-600 text-white border-emerald-700' : 
-                          status === 'Rejected' ? 'bg-rose-600 text-white border-rose-700' :
-                          'bg-amber-500 text-white border-amber-600'
-                        : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-                    } disabled:opacity-40`}
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                7. Payment Mode
+              </label>
+              <div className="w-full rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                {(['Cash', 'UPI', 'Bank', 'Cheque', 'Others'] as string[]).map((mode) => (
+                  <label
+                    key={mode}
+                    className="flex items-center gap-2.5 text-xs text-slate-700 font-medium cursor-pointer hover:text-slate-900 select-none"
                   >
-                    {status}
-                  </button>
+                    <input
+                      type="radio"
+                      name="creditPaymentMode"
+                      value={mode}
+                      checked={receiptMode === (mode === 'Others' ? 'Other' : mode)}
+                      onChange={() => setReceiptMode((mode === 'Others' ? 'Other' : mode) as ReceiptMode)}
+                      className="w-3.5 h-3.5 text-slate-800 border-slate-300 focus:ring-slate-500"
+                    />
+                    <span>{mode}</span>
+                  </label>
                 ))}
               </div>
             </div>
+          </div>
 
+          {/* ADVANCED LINE ITEMS / PARTICULARS MODULE (Expandable) */}
+          {showItemsTable && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-3 space-y-3 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                  Itemized Breakdown ({items.length} items)
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  Total auto-updates Received Amount (₹)
+                </span>
+              </div>
+
+              {/* Add / Edit Item Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-white p-2.5 rounded-lg border border-slate-200 text-xs">
+                <input
+                  type="text"
+                  placeholder="Item / Milestone description..."
+                  value={newItemName}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                  className="sm:col-span-6 h-8 px-2 border border-slate-200 rounded text-xs"
+                />
+                <input
+                  type="number"
+                  placeholder="Qty"
+                  value={newItemQty}
+                  onChange={(e) => setNewItemQty(e.target.value)}
+                  className="sm:col-span-2 h-8 px-2 border border-slate-200 rounded text-xs font-mono"
+                />
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="Rate / ₹"
+                  value={newItemRate}
+                  onChange={(e) => setNewItemRate(e.target.value)}
+                  className="sm:col-span-2 h-8 px-2 border border-slate-200 rounded text-xs font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddOrUpdateItem}
+                  className="sm:col-span-2 h-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{editingItemId ? 'Update' : 'Add'}</span>
+                </button>
+              </div>
+
+              {/* Items Table with Edit / Delete on each row */}
+              {items.length > 0 && (
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 text-[10px] text-slate-500 uppercase font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3">Item / Description</th>
+                        <th className="py-2 px-2 text-center">Qty</th>
+                        <th className="py-2 px-2 text-right">Rate (₹)</th>
+                        <th className="py-2 px-3 text-right">Amount (₹)</th>
+                        <th className="py-2 px-2 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {items.map((it) => (
+                        <tr key={it.id} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-medium text-slate-800">{it.name}</td>
+                          <td className="py-2 px-2 text-center font-mono">{it.qty || 1}</td>
+                          <td className="py-2 px-2 text-right font-mono">{it.rate ? formatIndianCurrency(it.rate) : '-'}</td>
+                          <td className="py-2 px-3 text-right font-bold font-mono text-slate-900">{formatIndianCurrency(it.amount)}</td>
+                          <td className="py-2 px-2 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEditItem(it)}
+                                className="p-1 text-slate-400 hover:text-blue-600 rounded"
+                                title="Edit item"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteItem(it.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                                title="Delete item"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Row 5: 8. Reason (Full Width) */}
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1.5">
+              8. Reason
+            </label>
+            <input
+              type="text"
+              placeholder="Enter Payment Reason / Description"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full h-11 text-xs rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
+            />
+          </div>
+
+          {/* Row 6: 9. Approved Person & 10. Receiver Person */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* 9. Approved Person */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-tighter">Received By:</label>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                9. Approved Person
+              </label>
               <input
                 type="text"
-                value={receivedBy}
-                onChange={(e) => setReceivedBy(e.target.value)}
-                className="w-full text-sm rounded-xl border-slate-200 bg-slate-50 focus:bg-white px-4 py-2"
+                placeholder="Select / Enter Name"
+                value={approvedPerson}
+                onChange={(e) => setApprovedPerson(e.target.value)}
+                className="w-full h-11 text-xs rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
               />
+            </div>
+
+            {/* 10. Receiver Person (with in-cell Edit/Add/Delete) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  10. Receiver Person
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setManageCellType('receiver')}
+                  className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer"
+                  title="Add, Edit or Delete Receiver Names"
+                >
+                  <Settings2 className="w-3 h-3" />
+                  <span>Edit/Add</span>
+                </button>
+              </div>
+
+              <input
+                type="text"
+                list="creditReceiverList"
+                placeholder="Select / Enter Name"
+                value={receiverPerson}
+                onChange={(e) => setReceiverPerson(e.target.value)}
+                className="w-full h-11 text-xs rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              />
+              <datalist id="creditReceiverList">
+                {receiverList.map((r, idx) => (
+                  <option key={idx} value={r} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+
+          {/* Section: 11. Action Buttons matching image_6320ea6b.png */}
+          <div className="pt-4 border-t border-slate-200">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-slate-800">
+                11. Action Buttons
+              </h3>
+              {isEditing && (
+                <button
+                  type="button"
+                  onClick={handleDeleteVoucher}
+                  className="text-[11px] text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1 cursor-pointer"
+                  title="Delete Voucher"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Voucher</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {/* Save */}
+              <button
+                type="button"
+                onClick={() => handleSave(false)}
+                disabled={isSubmitting}
+                className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
+              >
+                <Save className="w-5 h-5 text-slate-700 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold text-slate-800">Save</span>
+              </button>
+
+              {/* Edit / Update */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (isEditing) {
+                    handleSave(false);
+                  } else {
+                    showToast('Form ready for editing / updating');
+                  }
+                }}
+                className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
+              >
+                <Edit className="w-5 h-5 text-slate-700 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold text-slate-800">Edit / Update</span>
+              </button>
+
+              {/* Delete */}
+              <button
+                type="button"
+                onClick={handleDeleteVoucher}
+                className="p-3 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
+                title={isEditing ? 'Delete voucher permanently' : 'Clear form fields'}
+              >
+                <Trash2 className="w-5 h-5 text-rose-600 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold text-rose-800">Delete</span>
+              </button>
+
+              {/* Print PDF */}
+              <button
+                type="button"
+                onClick={() => handleSave(true)}
+                className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
+              >
+                <Printer className="w-5 h-5 text-slate-700 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold text-slate-800">Print PDF</span>
+              </button>
+
+              {/* Export Excel */}
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
+              >
+                <FileSpreadsheet className="w-5 h-5 text-slate-700 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold text-slate-800">Export Excel</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* MASTER CELL MANAGEMENT MODAL (Add / Edit / Delete in cell) */}
+      {manageCellType && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Manage {manageCellType === 'customer' ? 'Customers' : manageCellType === 'source' ? 'Sources' : 'Receivers'}
+              </h4>
+              <button
+                type="button"
+                onClick={() => { setManageCellType(null); setEditingMasterItem(null); }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Add new item */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter new name..."
+                value={newItemInput}
+                onChange={(e) => setNewItemInput(e.target.value)}
+                className="flex-1 h-9 px-2.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={handleAddMasterItem}
+                className="px-3 h-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </button>
+            </div>
+
+            {/* List with inline Edit & Delete */}
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {(manageCellType === 'customer' ? customerList : manageCellType === 'source' ? sourceOptions : receiverList).map((item, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs"
+                >
+                  {editingMasterItem && editingMasterItem.original === item ? (
+                    <div className="flex items-center gap-1 flex-1 mr-2">
+                      <input
+                        type="text"
+                        value={editingMasterItem.current}
+                        onChange={(e) => setEditingMasterItem({ ...editingMasterItem, current: e.target.value })}
+                        className="flex-1 h-7 px-2 text-xs border border-emerald-400 rounded bg-white"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveEditedMasterItem}
+                        className="p-1 text-emerald-600 hover:text-emerald-800"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="font-medium text-slate-800 truncate">{item}</span>
+                  )}
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditingMasterItem({ original: item, current: item })}
+                      className="p-1 text-slate-400 hover:text-blue-600 rounded"
+                      title="Edit item name"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMasterItem(item)}
+                      className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                      title="Delete item"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => { setManageCellType(null); setEditingMasterItem(null); }}
+                className="px-4 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Footer Actions */}
-        <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-4 shadow-lg flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="flex items-center justify-between sm:justify-start gap-2">
-            <button
-              type="button"
-              onClick={() => { if(confirm('Clear form fields?')) { setAmount(''); setCustomerName(''); setDescription(''); } }}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-3 sm:px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all"
-            >
-              Cancel
-            </button>
-          </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              onClick={() => handleSave(true)}
-              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl transition-all shadow-sm"
-            >
-              <Printer className="w-4 h-4" />
-              Save & Print Voucher
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 px-6 sm:px-8 py-2.5 text-xs sm:text-sm font-black text-white bg-blue-700 hover:bg-blue-800 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {isSubmitting ? 'Processing...' : isEditing ? 'Update Credit Voucher' : 'Save Voucher'}
-            </button>
-          </div>
-        </div>
-      </form>
+      {/* In-App Confirmation Modal for Deleting Voucher */}
+      <ConfirmDeleteModal
+        isOpen={showDeleteModal}
+        title="Delete Credit Voucher"
+        message={`Are you sure you want to permanently delete Credit Voucher "${initialVoucher?.voucherNo}"?`}
+        details={`Customer: ${customerName || initialVoucher?.customerName || '-'} • Amount: ₹${amount || '0'}`}
+        confirmLabel="Delete Voucher"
+        onConfirm={handleConfirmDelete}
+        onClose={() => setShowDeleteModal(false)}
+      />
+
+      {/* In-App Confirmation Modal for Clearing Draft */}
+      <ConfirmDeleteModal
+        isOpen={showClearModal}
+        title="Clear Voucher Form"
+        message="Are you sure you want to clear all entered form fields and reset this draft?"
+        confirmLabel="Clear Fields"
+        isDangerous={false}
+        onConfirm={handleConfirmClear}
+        onClose={() => setShowClearModal(false)}
+      />
+
     </div>
   );
 };

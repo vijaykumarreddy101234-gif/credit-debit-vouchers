@@ -15,8 +15,10 @@ import {
   ShieldCheck,
   ChevronRight,
   Building2,
-  PieChart
+  PieChart,
+  UserCog
 } from 'lucide-react';
+import { PermissionKey } from '../../utils/accessControl';
 
 export type ActiveTab =
   | 'dashboard'
@@ -25,7 +27,9 @@ export type ActiveTab =
   | 'debit-entry'
   | 'debit-register'
   | 'docs'
-  | 'crm-leads';
+  | 'crm-leads'
+  | 'pdf-editor'
+  | 'roles';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -35,6 +39,7 @@ interface SidebarProps {
   docsCount: number;
   isOpen?: boolean;
   onClose?: () => void;
+  can?: (p: PermissionKey) => boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -45,6 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   docsCount,
   isOpen = false,
   onClose,
+  can = () => true,
 }) => {
   const handleItemClick = (tab: ActiveTab) => {
     onSelectTab(tab);
@@ -81,7 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       
       {/* 1. DASHBOARD */}
       <div className="p-4 border-b border-slate-800/50">
-        <button
+        {can('dashboard.view') && (
+<button
           type="button"
           onClick={() => handleItemClick('dashboard')}
           className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
@@ -93,6 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <LayoutDashboard className="w-4 h-4" />
           <span>General Dashboard</span>
         </button>
+)}
       </div>
 
       {/* 2. IN VOUCHER DESK (CREDIT) */}
@@ -102,7 +110,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <ArrowDownLeft className="w-3 h-3" />
         </div>
         <nav className="space-y-1">
-          <button
+          {can('in.create') && (
+<button
             type="button"
             onClick={() => handleItemClick('credit-entry')}
             className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
@@ -117,7 +126,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 py-0.5 rounded font-bold uppercase">New</span>
           </button>
-          <button
+)}
+          {can('in.view') && (
+<button
             type="button"
             onClick={() => handleItemClick('credit-register')}
             className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
@@ -132,6 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <span className="text-[10px] font-bold opacity-60 font-mono">{inCount}</span>
           </button>
+)}
         </nav>
       </div>
 
@@ -142,7 +154,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <ArrowUpRight className="w-3 h-3" />
         </div>
         <nav className="space-y-1">
-          <button
+          {can('out.create') && (
+<button
             type="button"
             onClick={() => handleItemClick('debit-entry')}
             className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
@@ -157,7 +170,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1 py-0.5 rounded font-bold uppercase">New</span>
           </button>
-          <button
+)}
+          {can('out.view') && (
+<button
             type="button"
             onClick={() => handleItemClick('debit-register')}
             className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
@@ -172,6 +187,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <span className="text-[10px] font-bold opacity-60 font-mono">{outCount}</span>
           </button>
+)}
         </nav>
       </div>
 
@@ -182,7 +198,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             Enterprise Assets
           </div>
           <nav className="space-y-1">
-            <button
+            {can('pdf.studio') && (
+<button
+              type="button"
+              onClick={() => handleItemClick('pdf-editor')}
+              className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                activeTab === 'pdf-editor'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'hover:bg-slate-800/80 text-slate-300 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <PieChart className="w-4 h-4 text-blue-400" />
+                <span>PDF Studio</span>
+              </div>
+              <span className="text-[9px] bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded font-bold uppercase">Live</span>
+            </button>
+)}
+            {can('docs.view') && (
+<button
               type="button"
               onClick={() => handleItemClick('docs')}
               className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
@@ -197,9 +231,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono">{docsCount}</span>
             </button>
+)}
           </nav>
         </div>
       </div>
+
+      {can('roles.manage') && (
+        <div className="px-4 pb-4">
+          <div className="px-3 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Administration</div>
+          <button
+            type="button"
+            onClick={() => handleItemClick('roles')}
+            className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+              activeTab === 'roles' ? 'bg-indigo-600 text-white shadow-xs' : 'hover:bg-slate-800/80 text-slate-300 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <UserCog className="w-4 h-4 text-indigo-400" />
+              <span>Roles & Access</span>
+            </div>
+            <span className="text-[9px] bg-indigo-500/30 text-indigo-200 px-1.5 py-0.5 rounded font-bold uppercase">Admin</span>
+          </button>
+        </div>
+      )}
 
       {/* Compliance Stamp */}
       <div className="p-4 border-t border-slate-800 bg-slate-950/60 text-[11px] text-slate-400 space-y-1">

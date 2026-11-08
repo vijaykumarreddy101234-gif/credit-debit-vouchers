@@ -15,6 +15,63 @@ const STORAGE_KEY_ACCOUNTS = 'raviraja_crm_accounts_v1';
 const STORAGE_KEY_SUPPLIERS = 'raviraja_crm_suppliers_v1';
 const STORAGE_KEY_CUSTOMERS = 'raviraja_crm_customers_v1';
 const STORAGE_KEY_CURRENT_USER = 'raviraja_crm_current_user_v1';
+const STORAGE_KEY_PDF_BRANDING = 'raviraja_crm_pdf_branding_v1';
+
+export interface PdfBrandingSettings {
+  companyName: string;
+  companySubtitle: string;
+  companyAddress: string;
+  cin: string;
+  gstin: string;
+  pan: string;
+  leftLogoText: string;
+  leftLogoImage?: string;
+  leftLogoSize: 'small' | 'medium' | 'large';
+  leftLogoWidth: number;
+  leftLogoHeight: number;
+  leftLogoOffsetX: number;
+  leftLogoOffsetY: number;
+  rightSealTitle: string;
+  rightLogoImage?: string;
+  rightLogoSize: 'small' | 'medium' | 'large';
+  rightLogoWidth: number;
+  rightLogoHeight: number;
+  rightLogoOffsetX: number;
+  rightLogoOffsetY: number;
+  headerTheme: 'navy' | 'slate' | 'emerald' | 'dark';
+  terms: string[];
+  footerText: string;
+}
+
+export const DEFAULT_PDF_BRANDING: PdfBrandingSettings = {
+  companyName: 'RAVIRAJA INDUSTRIES PRIVATE LIMITED',
+  companySubtitle: 'Manufacturers & Suppliers of Heavy Engineering & Industrial Equipment',
+  companyAddress: 'Plot No. 44 & 45, Phase III, IDA Jeedimetla, Hyderabad - 500055, Telangana, India',
+  cin: 'U28112TG2015PTC099412',
+  gstin: '36AABCR1234F1Z8',
+  pan: 'AABCR1234F',
+  leftLogoText: 'RIL',
+  leftLogoImage: '',
+  leftLogoSize: 'medium',
+  leftLogoWidth: 20,
+  leftLogoHeight: 24,
+  leftLogoOffsetX: 0,
+  leftLogoOffsetY: 0,
+  rightSealTitle: 'ERP VERIFIED',
+  rightLogoImage: '',
+  rightLogoSize: 'medium',
+  rightLogoWidth: 32,
+  rightLogoHeight: 24,
+  rightLogoOffsetX: 0,
+  rightLogoOffsetY: 0,
+  headerTheme: 'navy',
+  terms: [
+    '1. Subject to Hyderabad jurisdiction.',
+    '2. Payment acknowledged subject to realization of cheque / RTGS.',
+    '3. This voucher is an authentic ERP instrument valid with authorised managerial signature and stamp.'
+  ],
+  footerText: 'Raviraja CRM Accounts Desk • Authenticated Voucher ID'
+};
 
 export const DEFAULT_USERS: Record<UserRole, UserProfile> = {
   'Admin': {
@@ -63,6 +120,22 @@ export const DEFAULT_CUSTOMERS = [
   'GMR Hyderabad Airport',
   'Singareni Collieries (SCCL)',
   'Telangana State Genco'
+];
+
+export const DEFAULT_CASHIERS = [
+  'Suresh Kumar',
+  'Lakshmi Narayana',
+  'Raviraja Reddy',
+  'M. Venkat Rao',
+  'K. Srinivasa Prasad'
+];
+
+export const DEFAULT_RECEIVERS = [
+  'Suresh Kumar',
+  'Lakshmi Narayana',
+  'Raviraja Reddy',
+  'P. Ramana Reddy',
+  'V. Anjaneyulu'
 ];
 
 export const DEFAULT_ACCOUNTS: AccountHead[] = [
@@ -135,7 +208,63 @@ let memoryCustomers: string[] | null = null;
 let memoryAccounts: AccountHead[] | null = null;
 let memoryUser: UserProfile | null = null;
 
+const STORAGE_KEY_MAIN_ACCOUNTS = 'raviraja_crm_main_accounts_v1';
+const STORAGE_KEY_CASHIERS = 'raviraja_crm_cashiers_v1';
+const STORAGE_KEY_RECEIVERS = 'raviraja_crm_receivers_v1';
+
+export const DEFAULT_MAIN_ACCOUNTS = [
+  'Company Office',
+  'Factory Jeedimetla Unit',
+  'Corporate Branch Office',
+  'Petty Cash A/c',
+  'SBI Current A/c',
+  'HDFC Operations A/c'
+];
+
+let memoryMainAccounts: string[] | null = null;
+let memoryCashiers: string[] | null = null;
+let memoryReceivers: string[] | null = null;
+
 export const voucherStorage = {
+  getMainAccounts(): string[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_MAIN_ACCOUNTS);
+      if (stored) return JSON.parse(stored);
+      localStorage.setItem(STORAGE_KEY_MAIN_ACCOUNTS, JSON.stringify(DEFAULT_MAIN_ACCOUNTS));
+      return DEFAULT_MAIN_ACCOUNTS;
+    } catch {
+      if (!memoryMainAccounts) memoryMainAccounts = [...DEFAULT_MAIN_ACCOUNTS];
+      return memoryMainAccounts;
+    }
+  },
+
+  addMainAccount(name: string): string[] {
+    const list = this.getMainAccounts();
+    if (!list.includes(name.trim())) {
+      const updated = [...list, name.trim()];
+      try { localStorage.setItem(STORAGE_KEY_MAIN_ACCOUNTS, JSON.stringify(updated)); } catch {}
+      memoryMainAccounts = updated;
+      return updated;
+    }
+    return list;
+  },
+
+  updateMainAccount(oldName: string, newName: string): string[] {
+    const list = this.getMainAccounts();
+    const updated = list.map(item => item === oldName ? newName.trim() : item);
+    try { localStorage.setItem(STORAGE_KEY_MAIN_ACCOUNTS, JSON.stringify(updated)); } catch {}
+    memoryMainAccounts = updated;
+    return updated;
+  },
+
+  deleteMainAccount(name: string): string[] {
+    const list = this.getMainAccounts();
+    const updated = list.filter(item => item !== name);
+    try { localStorage.setItem(STORAGE_KEY_MAIN_ACCOUNTS, JSON.stringify(updated)); } catch {}
+    memoryMainAccounts = updated;
+    return updated;
+  },
+
   getAccounts(): AccountHead[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_ACCOUNTS);
@@ -160,6 +289,33 @@ export const voucherStorage = {
     }
   },
 
+  addSupplier(name: string): string[] {
+    const list = this.getSuppliers();
+    if (!list.includes(name.trim())) {
+      const updated = [name.trim(), ...list];
+      try { localStorage.setItem(STORAGE_KEY_SUPPLIERS, JSON.stringify(updated)); } catch {}
+      memorySuppliers = updated;
+      return updated;
+    }
+    return list;
+  },
+
+  updateSupplier(oldName: string, newName: string): string[] {
+    const list = this.getSuppliers();
+    const updated = list.map(item => item === oldName ? newName.trim() : item);
+    try { localStorage.setItem(STORAGE_KEY_SUPPLIERS, JSON.stringify(updated)); } catch {}
+    memorySuppliers = updated;
+    return updated;
+  },
+
+  deleteSupplier(name: string): string[] {
+    const list = this.getSuppliers();
+    const updated = list.filter(item => item !== name);
+    try { localStorage.setItem(STORAGE_KEY_SUPPLIERS, JSON.stringify(updated)); } catch {}
+    memorySuppliers = updated;
+    return updated;
+  },
+
   getCustomers(): string[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_CUSTOMERS);
@@ -170,6 +326,111 @@ export const voucherStorage = {
       if (!memoryCustomers) memoryCustomers = [...DEFAULT_CUSTOMERS];
       return memoryCustomers;
     }
+  },
+
+  addCustomer(name: string): string[] {
+    const list = this.getCustomers();
+    if (!list.includes(name.trim())) {
+      const updated = [name.trim(), ...list];
+      try { localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(updated)); } catch {}
+      memoryCustomers = updated;
+      return updated;
+    }
+    return list;
+  },
+
+  updateCustomer(oldName: string, newName: string): string[] {
+    const list = this.getCustomers();
+    const updated = list.map(item => item === oldName ? newName.trim() : item);
+    try { localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(updated)); } catch {}
+    memoryCustomers = updated;
+    return updated;
+  },
+
+  deleteCustomer(name: string): string[] {
+    const list = this.getCustomers();
+    const updated = list.filter(item => item !== name);
+    try { localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(updated)); } catch {}
+    memoryCustomers = updated;
+    return updated;
+  },
+
+  getCashiers(): string[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_CASHIERS);
+      if (stored) return JSON.parse(stored);
+      localStorage.setItem(STORAGE_KEY_CASHIERS, JSON.stringify(DEFAULT_CASHIERS));
+      return DEFAULT_CASHIERS;
+    } catch {
+      if (!memoryCashiers) memoryCashiers = [...DEFAULT_CASHIERS];
+      return memoryCashiers;
+    }
+  },
+
+  addCashier(name: string): string[] {
+    const list = this.getCashiers();
+    if (!list.includes(name.trim())) {
+      const updated = [name.trim(), ...list];
+      try { localStorage.setItem(STORAGE_KEY_CASHIERS, JSON.stringify(updated)); } catch {}
+      memoryCashiers = updated;
+      return updated;
+    }
+    return list;
+  },
+
+  updateCashier(oldName: string, newName: string): string[] {
+    const list = this.getCashiers();
+    const updated = list.map(item => item === oldName ? newName.trim() : item);
+    try { localStorage.setItem(STORAGE_KEY_CASHIERS, JSON.stringify(updated)); } catch {}
+    memoryCashiers = updated;
+    return updated;
+  },
+
+  deleteCashier(name: string): string[] {
+    const list = this.getCashiers();
+    const updated = list.filter(item => item !== name);
+    try { localStorage.setItem(STORAGE_KEY_CASHIERS, JSON.stringify(updated)); } catch {}
+    memoryCashiers = updated;
+    return updated;
+  },
+
+  getReceivers(): string[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_RECEIVERS);
+      if (stored) return JSON.parse(stored);
+      localStorage.setItem(STORAGE_KEY_RECEIVERS, JSON.stringify(DEFAULT_RECEIVERS));
+      return DEFAULT_RECEIVERS;
+    } catch {
+      if (!memoryReceivers) memoryReceivers = [...DEFAULT_RECEIVERS];
+      return memoryReceivers;
+    }
+  },
+
+  addReceiver(name: string): string[] {
+    const list = this.getReceivers();
+    if (!list.includes(name.trim())) {
+      const updated = [name.trim(), ...list];
+      try { localStorage.setItem(STORAGE_KEY_RECEIVERS, JSON.stringify(updated)); } catch {}
+      memoryReceivers = updated;
+      return updated;
+    }
+    return list;
+  },
+
+  updateReceiver(oldName: string, newName: string): string[] {
+    const list = this.getReceivers();
+    const updated = list.map(item => item === oldName ? newName.trim() : item);
+    try { localStorage.setItem(STORAGE_KEY_RECEIVERS, JSON.stringify(updated)); } catch {}
+    memoryReceivers = updated;
+    return updated;
+  },
+
+  deleteReceiver(name: string): string[] {
+    const list = this.getReceivers();
+    const updated = list.filter(item => item !== name);
+    try { localStorage.setItem(STORAGE_KEY_RECEIVERS, JSON.stringify(updated)); } catch {}
+    memoryReceivers = updated;
+    return updated;
   },
 
   getCurrentUser(): UserProfile {
@@ -211,12 +472,14 @@ export const voucherStorage = {
   getNextCreditVoucherNumber(): string {
     const vouchers = this.getCreditVouchers();
     let maxNum = 0;
-    const prefix = 'IN-';
     vouchers.forEach((v) => {
-      const numPart = parseInt(v.voucherNo.replace(prefix, ''), 10);
-      if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
+      const match = v.voucherNo.match(/^(?:CV|IN)-(\d+)$/i);
+      if (match) {
+        const numPart = parseInt(match[1], 10);
+        if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
+      }
     });
-    return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
+    return `CV-${String(maxNum + 1).padStart(4, '0')}`;
   },
 
   saveCreditVoucher(data: Partial<CreditVoucher>): CreditVoucher {
@@ -246,7 +509,8 @@ export const voucherStorage = {
         ]
       } as CreditVoucher;
       vouchers[index] = updated;
-      localStorage.setItem(STORAGE_KEY_CREDIT_VOUCHERS, JSON.stringify(vouchers));
+      try { localStorage.setItem(STORAGE_KEY_CREDIT_VOUCHERS, JSON.stringify(vouchers)); } catch {}
+      memoryCreditVouchers = vouchers;
       return updated;
     } else {
       const voucherNo = this.getNextCreditVoucherNumber();
@@ -270,16 +534,17 @@ export const voucherStorage = {
         }]
       } as CreditVoucher;
       const updated = [newVoucher, ...vouchers];
-      localStorage.setItem(STORAGE_KEY_CREDIT_VOUCHERS, JSON.stringify(updated));
+      try { localStorage.setItem(STORAGE_KEY_CREDIT_VOUCHERS, JSON.stringify(updated)); } catch {}
+      memoryCreditVouchers = updated;
       return newVoucher;
     }
   },
 
-  deleteCreditVoucher(id: string, user: UserProfile): void {
-    if (user.role !== 'Admin') throw new Error('Unauthorized');
+  deleteCreditVoucher(id: string, _user?: UserProfile): void {
     const vouchers = this.getCreditVouchers();
     const filtered = vouchers.filter(v => v.id !== id);
-    localStorage.setItem(STORAGE_KEY_CREDIT_VOUCHERS, JSON.stringify(filtered));
+    try { localStorage.setItem(STORAGE_KEY_CREDIT_VOUCHERS, JSON.stringify(filtered)); } catch {}
+    memoryCreditVouchers = filtered;
   },
 
   // DEBIT (OUT) Vouchers
@@ -298,12 +563,14 @@ export const voucherStorage = {
   getNextDebitVoucherNumber(): string {
     const vouchers = this.getDebitVouchers();
     let maxNum = 0;
-    const prefix = 'OUT-';
     vouchers.forEach((v) => {
-      const numPart = parseInt(v.voucherNo.replace(prefix, ''), 10);
-      if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
+      const match = v.voucherNo.match(/^(?:DV|OUT)-(\d+)$/i);
+      if (match) {
+        const numPart = parseInt(match[1], 10);
+        if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
+      }
     });
-    return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
+    return `DV-${String(maxNum + 1).padStart(4, '0')}`;
   },
 
   saveDebitVoucher(data: Partial<DebitVoucher>): DebitVoucher {
@@ -333,7 +600,8 @@ export const voucherStorage = {
         ]
       } as DebitVoucher;
       vouchers[index] = updated;
-      localStorage.setItem(STORAGE_KEY_DEBIT_VOUCHERS, JSON.stringify(vouchers));
+      try { localStorage.setItem(STORAGE_KEY_DEBIT_VOUCHERS, JSON.stringify(vouchers)); } catch {}
+      memoryDebitVouchers = vouchers;
       return updated;
     } else {
       const voucherNo = this.getNextDebitVoucherNumber();
@@ -357,16 +625,44 @@ export const voucherStorage = {
         }]
       } as DebitVoucher;
       const updated = [newVoucher, ...vouchers];
-      localStorage.setItem(STORAGE_KEY_DEBIT_VOUCHERS, JSON.stringify(updated));
+      try { localStorage.setItem(STORAGE_KEY_DEBIT_VOUCHERS, JSON.stringify(updated)); } catch {}
+      memoryDebitVouchers = updated;
       return newVoucher;
     }
   },
 
-  deleteDebitVoucher(id: string, user: UserProfile): void {
-    if (user.role !== 'Admin') throw new Error('Unauthorized');
+  deleteDebitVoucher(id: string, _user?: UserProfile): void {
     const vouchers = this.getDebitVouchers();
     const filtered = vouchers.filter(v => v.id !== id);
-    localStorage.setItem(STORAGE_KEY_DEBIT_VOUCHERS, JSON.stringify(filtered));
+    try { localStorage.setItem(STORAGE_KEY_DEBIT_VOUCHERS, JSON.stringify(filtered)); } catch {}
+    memoryDebitVouchers = filtered;
+  },
+
+  isDuplicateVoucherNo(voucherNo: string, currentId?: string, type: 'IN(Credit)' | 'OUT(Debit)' = 'OUT(Debit)'): boolean {
+    const list = type === 'OUT(Debit)' ? this.getDebitVouchers() : this.getCreditVouchers();
+    return list.some(v => v.voucherNo.trim().toUpperCase() === voucherNo.trim().toUpperCase() && v.id !== currentId);
+  },
+
+  getFinancialSummary() {
+    const credits = this.getCreditVouchers();
+    const debits = this.getDebitVouchers();
+    const totalCredit = credits.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+    const totalDebit = debits.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+    const approvedCredit = credits.filter(v => v.approvalStatus === 'Approved').reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+    const approvedDebit = debits.filter(v => v.approvalStatus === 'Approved').reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+    const netBalance = totalCredit - totalDebit;
+    const approvedNetBalance = approvedCredit - approvedDebit;
+    return {
+      totalCredit,
+      totalDebit,
+      netBalance,
+      approvedCredit,
+      approvedDebit,
+      approvedNetBalance,
+      creditCount: credits.length,
+      debitCount: debits.length,
+      pendingCount: credits.filter(v => v.approvalStatus === 'Pending').length + debits.filter(v => v.approvalStatus === 'Pending').length
+    };
   },
 
   resetToDefaultData(): void {
@@ -377,6 +673,32 @@ export const voucherStorage = {
     this.getSuppliers();
     this.getCustomers();
     this.getCurrentUser();
+    this.getPdfBrandingSettings();
+  },
+
+  getPdfBrandingSettings(): PdfBrandingSettings {
+    try {
+      const data = localStorage.getItem(STORAGE_KEY_PDF_BRANDING);
+      if (data) {
+        return JSON.parse(data);
+      }
+    } catch {}
+    return { ...DEFAULT_PDF_BRANDING };
+  },
+
+  savePdfBrandingSettings(settings: Partial<PdfBrandingSettings>): void {
+    const existing = this.getPdfBrandingSettings();
+    const merged = { ...existing, ...settings };
+    try {
+      localStorage.setItem(STORAGE_KEY_PDF_BRANDING, JSON.stringify(merged));
+    } catch {}
+  },
+
+  resetPdfBrandingSettings(): PdfBrandingSettings {
+    try {
+      localStorage.removeItem(STORAGE_KEY_PDF_BRANDING);
+    } catch {}
+    return { ...DEFAULT_PDF_BRANDING };
   }
 };
 

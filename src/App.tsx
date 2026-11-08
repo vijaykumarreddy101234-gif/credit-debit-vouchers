@@ -9,14 +9,109 @@ import { PrintableVoucher } from './components/voucher/PrintableVoucher';
 import { DocumentRegister } from './components/voucher/DocumentRegister';
 import { VoucherDashboard } from './components/voucher/VoucherDashboard';
 import { ClientsView } from './components/crm/ClientsView';
+import { PdfEditorCanvas } from './components/voucher/PdfEditorCanvas';
 import { VoucherDetailsModal } from './components/voucher/VoucherDetailsModal';
 import { InVoucher, UserProfile, UserRole, CreditVoucher, DebitVoucher } from './types/voucher';
 import { voucherStorage } from './utils/voucherStorage';
+import { ConfirmDeleteModal } from './components/voucher/ConfirmDeleteModal';
 import { CheckCircle2, X } from 'lucide-react';
+import { LoginScreen } from './components/auth/LoginScreen';
+import { RolesAccessView } from './components/admin/RolesAccessView';
+import { BrandModal } from './components/layout/BrandModal';
+import { AccessProvider } from './components/AccessContext';
+import {
+  CLOUD_CHANGE_EVENT, CLOUD_ERROR_EVENT, CLOUD_STATUS_EVENT, cloudEnabled, signOutCloud, startCloudSession, supabase,
+} from './utils/cloudSync';
+import {
+  AppUser, PermissionKey, accessStore, applySessionProfile, brandStore, ensureSeedUsers, getSessionUser, logout,
+} from './utils/accessControl';
 
 export default function App() {
-  // Authentication & Role
-  const [currentUser, setCurrentUser] = useState<UserProfile>(() => voucherStorage.getCurrentUser());
+  // Authentication: signed-in account + role permissions
+  const [sessionUser, setSessionUser] = useState<AppUser | null>(() => getSessionUser());
+  const [permVersion, setPermVersion] = useState(0);
+  const [brand, setBrand] = useState(() => brandStore.get());
+  const [showBrandModal, setShowBrandModal] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [cloudAuth, setCloudAuth] = useState<{ status: 'signed-out' | 'denied' | 'error'; email?: string; message?: string } | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'live' | 'connecting' | 'offline' | null>(cloudEnabled ? 'connecting' : null);
+
+  useEffect(() => {
+    if (!cloudEnabled) {
+      ensureSeedUsers().then(() => {
+        setSessionUser(getSessionUser());
+        setReady(true);
+      });
+      return;
+    }
+    let cancelled = false;
+    const boot = async () => {
+      const res = await startCloudSession();
+      if (cancelled) return;
+      if (res.status === 'ok') {
+        setSessionUser(res.user);
+        setCloudAuth(null);
+        refreshData();
+        setBrand(brandStore.get());
+      } else {
+        setSessionUser(null);
+        setCloudAuth(res);
+      }
+      setReady(true);
+    };
+    boot();
+    const { data: sub } = supabase!.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') boot();
+      if (event === 'SIGNED_OUT') {
+        setSessionUser(null);
+        setCloudAuth({ status: 'signed-out' });
+      }
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Live updates pushed from the cloud (other people's changes, role edits, branding …)
+  useEffect(() => {
+    if (!cloudEnabled) return;
+    const onChange = () => {
+      setPermVersion((v) => v + 1);
+      refreshData();
+      setBrand(brandStore.get());
+      const u = getSessionUser();
+      if (!u) {
+        signOutCloud();
+        setSessionUser(null);
+        setCloudAuth({ status: 'denied', email: '' });
+      } else {
+        setSessionUser(u);
+      }
+    };
+    const onError = (e: Event) => showToast(String((e as CustomEvent).detail || 'Cloud sync problem'));
+    const onStatus = (e: Event) => setSyncStatus((e as CustomEvent).detail);
+    window.addEventListener(CLOUD_CHANGE_EVENT, onChange);
+    window.addEventListener(CLOUD_ERROR_EVENT, onError);
+    window.addEventListener(CLOUD_STATUS_EVENT, onStatus);
+    return () => {
+      window.removeEventListener(CLOUD_CHANGE_EVENT, onChange);
+      window.removeEventListener(CLOUD_ERROR_EVENT, onError);
+      window.removeEventListener(CLOUD_STATUS_EVENT, onStatus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const permissions = React.useMemo(() => accessStore.getPermissions(), [permVersion, sessionUser]);
+  const can = React.useCallback(
+    (p: PermissionKey) => (sessionUser ? permissions[sessionUser.role]?.includes(p) ?? false : false),
+    [permissions, sessionUser]
+  );
+
+  const currentUser: UserProfile = sessionUser
+    ? { id: sessionUser.id, name: sessionUser.name, role: sessionUser.role, designation: sessionUser.designation, department: sessionUser.department, avatar: sessionUser.avatar || '' }
+    : voucherStorage.getCurrentUser();
 
   // Data Store
   const [creditVouchers, setCreditVouchers] = useState<CreditVoucher[]>(() => voucherStorage.getCreditVouchers());
@@ -31,6 +126,9 @@ export default function App() {
   const [printingVoucher, setPrintingVoucher] = useState<InVoucher | null>(null);
   const [viewingVoucher, setViewingVoucher] = useState<InVoucher | null>(null);
 
+  // Confirmation Modal for Database Reset
+  const [showResetModal, setShowResetModal] = useState<boolean>(false);
+
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -40,21 +138,36 @@ export default function App() {
     setDebitVouchers(voucherStorage.getDebitVouchers());
   };
 
-  // Role Switcher Handler
-  const handleRoleChange = (role: UserRole) => {
-    const updatedUser = voucherStorage.setCurrentUser(role);
-    setCurrentUser(updatedUser);
-    showToast(`Switched active user to ${updatedUser.name} (${role})`);
+  const handleLogout = async () => {
+    if (cloudEnabled) {
+      await signOutCloud();
+      setCloudAuth({ status: 'signed-out' });
+    }
+    logout();
+    setSessionUser(null);
+    setEditingVoucher(null);
+    setPrintingVoucher(null);
+    setViewingVoucher(null);
+    setActiveTab('dashboard');
+  };
+
+  const firstAllowedTab = (): ActiveTab => {
+    const order: Array<[ActiveTab, PermissionKey]> = [
+      ['dashboard', 'dashboard.view'], ['credit-register', 'in.view'], ['debit-register', 'out.view'],
+      ['docs', 'docs.view'], ['pdf-editor', 'pdf.studio'], ['roles', 'roles.manage'],
+    ];
+    return order.find(([, p]) => can(p))?.[0] || 'dashboard';
   };
 
   // Reset Demo Data
   const handleResetData = () => {
-    if (confirm('Reset database to default ERP records?')) {
-      voucherStorage.resetToDefaultData();
-      refreshData();
-      setCurrentUser(voucherStorage.getCurrentUser());
-      showToast('Database reset to authentic initial ERP vouchers.');
-    }
+    setShowResetModal(true);
+  };
+
+  const confirmResetData = () => {
+    voucherStorage.resetToDefaultData();
+    refreshData();
+    showToast('Database reset to authentic initial ERP vouchers.');
   };
 
   const showToast = (msg: string) => {
@@ -88,13 +201,54 @@ export default function App() {
   // Count documents
   const totalDocsCount = [...creditVouchers, ...debitVouchers].reduce((acc, v) => acc + (v.attachments ? v.attachments.length : 0), 0);
 
+  const TAB_PERMISSION: Record<ActiveTab, PermissionKey> = {
+    dashboard: 'dashboard.view',
+    'credit-entry': 'in.create',
+    'credit-register': 'in.view',
+    'debit-entry': 'out.create',
+    'debit-register': 'out.view',
+    docs: 'docs.view',
+    'crm-leads': 'clients.view',
+    'pdf-editor': 'pdf.studio',
+    roles: 'roles.manage',
+  };
+  const tabAllowed = can(TAB_PERMISSION[activeTab]);
+
+  // After sign-in (or a permission change) make sure we are on a page this role may open
+  useEffect(() => {
+    if (sessionUser && !can(TAB_PERMISSION[activeTab])) setActiveTab(firstAllowedTab());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUser, permissions]);
+
+  if (!ready) return <div className="min-h-screen bg-slate-950" />;
+  if (!sessionUser) {
+    return (
+      <LoginScreen
+        cloud={cloudEnabled ? cloudAuth || { status: 'signed-out' } : undefined}
+        onLoggedIn={(u) => {
+          applySessionProfile(u);
+          setSessionUser(u);
+          refreshData();
+          setBrand(brandStore.get());
+        }}
+      />
+    );
+  }
+
   return (
+    <AccessProvider can={can}>
     <div className="h-screen bg-slate-100 flex flex-col font-sans overflow-hidden">
       
       {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
-        onRoleChange={handleRoleChange}
+        contact={{ email: sessionUser.email, mobile: sessionUser.mobile }}
+        brand={brand}
+        canEditBrand={can('branding.edit')}
+        onEditBrand={() => setShowBrandModal(true)}
+        onLogout={handleLogout}
+        hideReset={cloudEnabled}
+        syncStatus={syncStatus}
         onResetData={handleResetData}
         onGlobalSearch={(term) => {
           if (term.trim()) {
@@ -117,6 +271,7 @@ export default function App() {
           inCount={creditVouchers.length}
           outCount={debitVouchers.length}
           docsCount={totalDocsCount}
+          can={can}
           isOpen={isMobileSidebarOpen}
           onClose={() => setIsMobileSidebarOpen(false)}
         />
@@ -142,7 +297,12 @@ export default function App() {
           )}
 
           {/* Conditional Rendering */}
-          {printingVoucher ? (
+          {!tabAllowed && !printingVoucher ? (
+            <div className="mx-auto mt-10 max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xs">
+              <p className="text-lg font-extrabold text-slate-900">No access</p>
+              <p className="mt-1 text-sm text-slate-500">Your role ({currentUser.role}) is not allowed to open this page. Ask an Admin to update your permissions.</p>
+            </div>
+          ) : printingVoucher ? (
             <PrintableVoucher
               voucher={printingVoucher}
               onBack={() => setPrintingVoucher(null)}
@@ -157,7 +317,17 @@ export default function App() {
               initialVoucher={editingVoucher as CreditVoucher}
               currentUser={currentUser}
               onSaveSuccess={handleSaveSuccess}
-              onCancel={() => setActiveTab('credit-register')}
+              onDeleteSuccess={() => {
+                refreshData();
+                setEditingVoucher(null);
+                setActiveTab('credit-register');
+                showToast('Credit voucher deleted successfully.');
+              }}
+              onCancel={() => {
+                refreshData();
+                setEditingVoucher(null);
+                setActiveTab('credit-register');
+              }}
               onSwitchToDebit={() => {
                 setEditingVoucher(null);
                 setActiveTab('debit-entry');
@@ -168,7 +338,10 @@ export default function App() {
               currentUser={currentUser}
               vouchers={creditVouchers}
               onRefresh={refreshData}
-              onCreateNew={() => setActiveTab('credit-entry')}
+              onCreateNew={() => {
+                setEditingVoucher(null);
+                setActiveTab('credit-entry');
+              }}
               onEdit={(v) => {
                 setEditingVoucher(v);
                 setActiveTab('credit-entry');
@@ -181,7 +354,17 @@ export default function App() {
               initialVoucher={editingVoucher as DebitVoucher}
               currentUser={currentUser}
               onSaveSuccess={handleSaveSuccess}
-              onCancel={() => setActiveTab('debit-register')}
+              onDeleteSuccess={() => {
+                refreshData();
+                setEditingVoucher(null);
+                setActiveTab('debit-register');
+                showToast('Debit voucher deleted successfully.');
+              }}
+              onCancel={() => {
+                refreshData();
+                setEditingVoucher(null);
+                setActiveTab('debit-register');
+              }}
               onSwitchToCredit={() => {
                 setEditingVoucher(null);
                 setActiveTab('credit-entry');
@@ -192,7 +375,10 @@ export default function App() {
               currentUser={currentUser}
               vouchers={debitVouchers}
               onRefresh={refreshData}
-              onCreateNew={() => setActiveTab('debit-entry')}
+              onCreateNew={() => {
+                setEditingVoucher(null);
+                setActiveTab('debit-entry');
+              }}
               onEdit={(v) => {
                 setEditingVoucher(v);
                 setActiveTab('debit-entry');
@@ -204,9 +390,22 @@ export default function App() {
             <VoucherDashboard
               inVouchers={creditVouchers}
               outVouchers={debitVouchers}
-              onNavigate={(tab) => setActiveTab(tab as any)}
+              onNavigate={(tab) => {
+                setEditingVoucher(null);
+                setActiveTab(tab as any);
+              }}
               onViewVoucher={(v) => setViewingVoucher(v)}
               onPrintVoucher={(v) => setPrintingVoucher(v)}
+            />
+          ) : activeTab === 'pdf-editor' ? (
+            <PdfEditorCanvas
+              onNotify={(msg) => showToast(msg)}
+            />
+          ) : activeTab === 'roles' ? (
+            <RolesAccessView
+              currentUserId={sessionUser.id}
+              onPermissionsChanged={() => setPermVersion((v) => v + 1)}
+              onNotify={(m) => showToast(m)}
             />
           ) : activeTab === 'docs' ? (
             <DocumentRegister
@@ -237,9 +436,48 @@ export default function App() {
           setEditingVoucher(v);
           setActiveTab(v.voucherType === 'OUT(Debit)' ? 'debit-entry' : 'credit-entry');
         }}
+        onDelete={(v) => {
+          try {
+            if (v.voucherType === 'OUT(Debit)') {
+              voucherStorage.deleteDebitVoucher(v.id, currentUser);
+            } else {
+              voucherStorage.deleteCreditVoucher(v.id, currentUser);
+            }
+            refreshData();
+            setViewingVoucher(null);
+            showToast(`Voucher ${v.voucherNo} permanently deleted.`);
+          } catch (err: any) {
+            showToast(`Delete error: ${err.message}`);
+          }
+        }}
+      />
+
+      {showBrandModal && (
+        <BrandModal
+          brand={brand}
+          onClose={() => setShowBrandModal(false)}
+          onSave={(b) => {
+            brandStore.save(b);
+            setBrand(b);
+            setShowBrandModal(false);
+            showToast('App name & logo updated.');
+          }}
+        />
+      )}
+
+      {/* In-App Confirmation Modal for Database Reset */}
+      <ConfirmDeleteModal
+        isOpen={showResetModal}
+        title="Reset Demo Records"
+        message="Are you sure you want to reset the CRM database to default ERP records? Any unsaved custom records will be replaced."
+        confirmLabel="Reset Database"
+        isDangerous={true}
+        onConfirm={confirmResetData}
+        onClose={() => setShowResetModal(false)}
       />
 
     </div>
+    </AccessProvider>
   );
 }
 

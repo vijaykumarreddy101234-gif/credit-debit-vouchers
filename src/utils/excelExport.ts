@@ -1,10 +1,20 @@
 import { InVoucher, formatVoucherType } from '../types/voucher';
+import { voucherStorage } from './voucherStorage';
 
 export function exportInVouchersToExcel(vouchers: InVoucher[], filename = 'Raviraja_CRM_Voucher_Register.csv') {
   if (!vouchers || vouchers.length === 0) {
-    alert('No vouchers available to export.');
     return;
   }
+
+  const branding = voucherStorage.getPdfBrandingSettings();
+
+  const metaRows = [
+    [`"${branding.companyName}"`],
+    [`"${branding.companySubtitle}"`],
+    [`"${branding.companyAddress}"`],
+    [`"CIN: ${branding.cin} | GSTIN: ${branding.gstin} | PAN: ${branding.pan}"`],
+    ['""']
+  ];
 
   const headers = [
     'S.No',
@@ -49,8 +59,8 @@ export function exportInVouchersToExcel(vouchers: InVoucher[], filename = 'Ravir
       escapeCell(v.amountInWords),
       escapeCell(v.paymentParticulars || '-'),
       escapeCell(v.noteReason || '-'),
-      escapeCell(v.createdBy), // Using createdBy for preparedBy
-      escapeCell(v.approvedBy || 'Pending'), // Using approvedBy for passedBy
+      escapeCell(v.createdBy),
+      escapeCell(v.approvedBy || 'Pending'),
       escapeCell(v.createdBy),
       escapeCell(v.approvalStatus),
       v.attachments ? v.attachments.length : 0
@@ -58,6 +68,7 @@ export function exportInVouchersToExcel(vouchers: InVoucher[], filename = 'Ravir
   });
 
   const csvContent = [
+    ...metaRows.map(r => r.join(',')),
     headers.map(h => `"${h}"`).join(','),
     ...rows.map(r => r.join(','))
   ].join('\r\n');

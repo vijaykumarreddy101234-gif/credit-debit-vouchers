@@ -42,6 +42,15 @@ export function formatVoucherType(type?: string): VoucherType {
   return 'IN(Credit)';
 }
 
+export interface VoucherLineItem {
+  id: string;
+  name: string;
+  qty?: number;
+  rate?: number;
+  amount: number;
+  unit?: string;
+}
+
 // Unified interface for shared logic, but with optional fields for both
 export interface BaseVoucher {
   id: string;
@@ -69,27 +78,31 @@ export interface BaseVoucher {
   referenceDetails?: string;
   paymentParticulars?: string;
   noteReason?: string;
+  items?: VoucherLineItem[];
 }
 
 export interface DebitVoucher extends BaseVoucher {
   voucherType: 'OUT(Debit)';
   paymentMode: PaymentMode;
-  supplierDetails: 'Supplier' | 'Employee' | 'Labour Advance' | 'Other';
+  supplierDetails: 'Supplier' | 'Expense' | 'Labour Advance' | 'Other';
   supplierName: string;
   supplierGstin?: string;
   originalPurchaseBill?: string;
   purchaseBillDate?: string;
   prepaidAmount?: number;
   cashierName?: string;
+  purchaseOrderNumber?: string;
+  mainAccount?: string;
 }
 
 export interface CreditVoucher extends BaseVoucher {
   voucherType: 'IN(Credit)';
   receiptMode: ReceiptMode;
   customerName: string;
-  receiptType: 'Sales' | 'Party Payment' | 'Other';
+  receiptType: 'Sales' | 'Party/Customer' | 'Party Payment' | 'Other';
   receivedBy?: string;
   customerGstin?: string;
+  source?: string;
 }
 
 // Maintain compatibility with existing code during transition

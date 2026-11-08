@@ -1,3 +1,4 @@
+import { useAccess } from '../AccessContext';
 import React from 'react';
 import {
   X,
@@ -12,12 +13,14 @@ import {
   FileText,
   History,
   CheckCircle2,
-  Briefcase
+  Briefcase,
+  Trash2
 } from 'lucide-react';
 import { InVoucher, CreditVoucher, DebitVoucher } from '../../types/voucher';
 import { formatIndianCurrency } from '../../utils/numberToWordsIndian';
 import { generateVoucherPdf } from '../../utils/pdfGenerator';
 import { DocumentUploadSection } from './DocumentUploadSection';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface VoucherDetailsModalProps {
   voucher: InVoucher | null;
@@ -25,6 +28,7 @@ interface VoucherDetailsModalProps {
   onClose: () => void;
   onPrint: (voucher: InVoucher) => void;
   onEdit?: (voucher: InVoucher) => void;
+  onDelete?: (voucher: InVoucher) => void;
 }
 
 export const VoucherDetailsModal: React.FC<VoucherDetailsModalProps> = ({
@@ -33,9 +37,13 @@ export const VoucherDetailsModal: React.FC<VoucherDetailsModalProps> = ({
   onClose,
   onPrint,
   onEdit,
+  onDelete,
 }) => {
+  const [showConfirmDelete, setShowConfirmDelete] = React.useState(false);
+
   if (!isOpen || !voucher) return null;
   const isOut = voucher.voucherType === 'OUT(Debit)';
+  const { can } = useAccess();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
@@ -76,37 +84,52 @@ export const VoucherDetailsModal: React.FC<VoucherDetailsModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {onEdit && (
+            {onEdit && can(isOut ? 'out.edit' : 'in.edit') && (
               <button
                 type="button"
                 onClick={() => {
                   onClose();
                   onEdit(voucher);
                 }}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
+                className="px-3 py-1.5 text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
               >
                 Edit
               </button>
             )}
-            <button
+            {onDelete && can(isOut ? 'out.delete' : 'in.delete') && (
+              <button
+                type="button"
+                onClick={() => setShowConfirmDelete(true)}
+                className="px-3 py-1.5 text-xs font-semibold text-rose-300 bg-rose-950/60 hover:bg-rose-900 border border-rose-800 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Delete this voucher permanently"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span>Delete</span>
+              </button>
+            )}
+            {can('pdf.download') && (
+<button
               type="button"
               onClick={() => generateVoucherPdf(voucher)}
-              className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               PDF
             </button>
-            <button
+)}
+            {can('pdf.download') && (
+<button
               type="button"
               onClick={() => {
                 onClose();
                 onPrint(voucher);
               }}
-              className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               Print
             </button>
+)}
             <button
               type="button"
               onClick={onClose}
@@ -235,6 +258,34 @@ export const VoucherDetailsModal: React.FC<VoucherDetailsModalProps> = ({
                 <p className="text-slate-600 italic mt-0.5">{voucher.remarks}</p>
               </div>
             )}
+
+            {voucher.items && voucher.items.length > 0 && (
+              <div className="pt-2 border-t border-slate-100">
+                <span className="text-slate-400 text-[11px] block mb-1">Itemized Particulars ({voucher.items.length} items):</span>
+                <div className="rounded-lg border border-slate-200 overflow-hidden">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 text-[10px] text-slate-500 uppercase font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="py-1.5 px-3">Item / Description</th>
+                        <th className="py-1.5 px-2 text-center">Qty</th>
+                        <th className="py-1.5 px-2 text-right">Rate (₹)</th>
+                        <th className="py-1.5 px-3 text-right">Amount (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {voucher.items.map((it, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-1.5 px-3 font-medium text-slate-800">{it.name}</td>
+                          <td className="py-1.5 px-2 text-center font-mono">{it.qty || 1}</td>
+                          <td className="py-1.5 px-2 text-right font-mono">{it.rate ? formatIndianCurrency(it.rate) : '-'}</td>
+                          <td className="py-1.5 px-3 text-right font-bold font-mono text-slate-900">{formatIndianCurrency(it.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Signatures & Authorizations */}
@@ -312,12 +363,27 @@ export const VoucherDetailsModal: React.FC<VoucherDetailsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            className="px-4 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
           >
             Close Details
           </button>
         </div>
       </div>
+
+      {/* In-App Confirmation Modal for Voucher Deletion */}
+      <ConfirmDeleteModal
+        isOpen={showConfirmDelete}
+        title="Delete Voucher"
+        message={`Are you sure you want to permanently delete ${voucher.voucherType} "${voucher.voucherNo}"?`}
+        details={`Party / Vendor: ${voucher.personName || (voucher as any).supplierName || (voucher as any).customerName || '-'} • Amount: ${formatIndianCurrency(voucher.amount)} • Date: ${voucher.date}`}
+        confirmLabel="Delete Voucher"
+        onConfirm={() => {
+          setShowConfirmDelete(false);
+          if (onDelete) onDelete(voucher);
+          onClose();
+        }}
+        onClose={() => setShowConfirmDelete(false)}
+      />
     </div>
   );
 };

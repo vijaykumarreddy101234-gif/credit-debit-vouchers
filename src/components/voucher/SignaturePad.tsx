@@ -98,12 +98,15 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
     onChange('', 'draw');
   };
 
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError(null);
 
     if (!file.type.startsWith('image/')) {
-      alert('Please upload a valid image file (PNG, JPG, or WEBP).');
+      setUploadError('Please upload a valid image file (PNG, JPG, or WEBP).');
       return;
     }
 
@@ -293,6 +296,11 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
                   className="hidden"
                 />
               </label>
+            )}
+            {uploadError && (
+              <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
+                <span>⚠️</span> {uploadError}
+              </p>
             )}
           </div>
         )}
