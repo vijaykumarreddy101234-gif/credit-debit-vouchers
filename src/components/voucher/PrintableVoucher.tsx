@@ -403,9 +403,6 @@ export const PrintableVoucher: React.FC<PrintableVoucherProps> = ({
                     <span>CIN:</span>
                     <input value={cinNumber} onChange={(e) => setCinNumber(e.target.value)} className="w-[9.5rem] font-bold text-cyan-200 border-none p-0 focus:ring-0 focus:outline-none bg-transparent" />
                     <span className="text-slate-500">|</span>
-                    <span>GSTIN:</span>
-                    <input value={gstinNumber} onChange={(e) => setGstinNumber(e.target.value)} className="w-32 font-bold text-cyan-200 border-none p-0 focus:ring-0 focus:outline-none bg-transparent" />
-                    <span className="text-slate-500">|</span>
                     <span>PAN:</span>
                     <input value={panNumber} onChange={(e) => setPanNumber(e.target.value)} className="w-24 font-bold text-cyan-200 border-none p-0 focus:ring-0 focus:outline-none bg-transparent" />
                   </div>
@@ -548,12 +545,10 @@ export const PrintableVoucher: React.FC<PrintableVoucherProps> = ({
                       {isOut ? (
                         <>
                           {row('Supplier / Payee', <input className={`${inputClasses} font-extrabold text-sm text-slate-950`} value={(voucher as DebitVoucher).supplierName} onChange={(e) => handleFieldChange('supplierName', e.target.value)} />, true)}
-                          {row('Supplier GSTIN', <input className={`${inputClasses} font-semibold text-slate-800`} placeholder="-" value={(voucher as DebitVoucher).supplierGstin || ''} onChange={(e) => handleFieldChange('supplierGstin', e.target.value)} />)}
                         </>
                       ) : (
                         <>
                           {row('Customer / Party', <input className={`${inputClasses} font-extrabold text-sm text-slate-950`} value={(voucher as CreditVoucher).customerName} onChange={(e) => handleFieldChange('customerName', e.target.value)} />, true)}
-                          {row('Customer GSTIN', <input className={`${inputClasses} font-semibold text-slate-800`} placeholder="-" value={(voucher as CreditVoucher).customerGstin || ''} onChange={(e) => handleFieldChange('customerGstin', e.target.value)} />)}
                         </>
                       )}
                       {row(isOut ? 'Payment Purpose' : 'Receipt Purpose', <textarea rows={2} className={`${inputClasses} text-slate-900 leading-relaxed resize-none font-medium`} value={voucher.description} onChange={(e) => handleFieldChange('description', e.target.value)} />)}

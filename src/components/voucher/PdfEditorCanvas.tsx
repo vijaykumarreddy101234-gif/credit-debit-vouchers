@@ -14,7 +14,7 @@ import {
   Printer,
 } from 'lucide-react';
 import { voucherStorage, PdfBrandingSettings, DEFAULT_PDF_BRANDING } from '../../utils/voucherStorage';
-import { buildVoucherPdf, savePdfFile, PdfBrandingOptions } from '../../utils/pdfGenerator';
+import { buildVoucherPdfFull, savePdfFile, PdfBrandingOptions } from '../../utils/pdfGenerator';
 import { CreditVoucher, DebitVoucher, InVoucher } from '../../types/voucher';
 import { PdfPreview } from './PdfPreview';
 
@@ -72,7 +72,7 @@ export const PdfEditorCanvas: React.FC<PdfEditorCanvasProps> = ({ onNotify, init
   const [settings, setSettings] = useState<PdfBrandingSettings>(() => voucherStorage.getPdfBrandingSettings());
   const [panel, setPanel] = useState<'edit' | 'preview'>('preview'); // mobile/tablet toggle
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
-  const [includeDocs, setIncludeDocs] = useState(false);
+  const [includeDocs, setIncludeDocs] = useState(true);
   const leftFile = useRef<HTMLInputElement>(null);
   const rightFile = useRef<HTMLInputElement>(null);
 
@@ -149,15 +149,16 @@ export const PdfEditorCanvas: React.FC<PdfEditorCanvasProps> = ({ onNotify, init
 
   // Live preview: regenerate (debounced) whenever the voucher or branding changes
   useEffect(() => {
-    const t = setTimeout(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
       try {
-        const { doc } = buildVoucherPdf(activeVoucher, includeDocs, pdfOptions(settings));
-        setPdfData(doc.output('arraybuffer'));
+        const { doc } = await buildVoucherPdfFull(activeVoucher, includeDocs, pdfOptions(settings));
+        if (!cancelled) setPdfData(doc.output('arraybuffer'));
       } catch (e) {
         console.error('Preview build failed', e);
       }
     }, 250);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, activeVoucher.id, templateType, includeDocs]);
 
@@ -186,9 +187,9 @@ export const PdfEditorCanvas: React.FC<PdfEditorCanvasProps> = ({ onNotify, init
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     try {
-      const { doc, fileName } = buildVoucherPdf(activeVoucher, includeDocs, pdfOptions(settings));
+      const { doc, fileName } = await buildVoucherPdfFull(activeVoucher, includeDocs, pdfOptions(settings));
       savePdfFile(doc, fileName);
       onNotify(`Downloaded ${fileName}`);
     } catch (err: any) {
@@ -197,8 +198,8 @@ export const PdfEditorCanvas: React.FC<PdfEditorCanvasProps> = ({ onNotify, init
     }
   };
 
-  const handleOpen = () => {
-    const { doc } = buildVoucherPdf(activeVoucher, includeDocs, pdfOptions(settings));
+  const handleOpen = async () => {
+    const { doc } = await buildVoucherPdfFull(activeVoucher, includeDocs, pdfOptions(settings));
     window.open(String(doc.output('bloburl')), '_blank');
   };
 
@@ -330,7 +331,6 @@ export const PdfEditorCanvas: React.FC<PdfEditorCanvasProps> = ({ onNotify, init
               {(
                 [
                   ['CIN', 'cin'],
-                  ['GSTIN', 'gstin'],
                   ['PAN', 'pan'],
                 ] as const
               ).map(([lbl, key]) => (

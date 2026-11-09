@@ -65,7 +65,8 @@ const dataUrlFormat = (dataUrl: string): 'PNG' | 'JPEG' | 'WEBP' => {
 export function buildVoucherPdf(
   voucher: InVoucher,
   includeAttachments: boolean = false,
-  customOptions?: PdfBrandingOptions
+  customOptions?: PdfBrandingOptions,
+  resolvedPages?: Record<string, string[]>
 ): { doc: jsPDF; fileName: string } {
   const stored = voucherStorage.getPdfBrandingSettings();
   const branding: any = {
@@ -211,7 +212,7 @@ export function buildVoucherPdf(
   });
 
   font('semibold', 6.3, [165, 243, 252]);
-  const ident = `CIN: ${branding.cin || '-'}   |   GSTIN: ${branding.gstin || '-'}   |   PAN: ${branding.pan || '-'}`;
+  const ident = `CIN: ${branding.cin || '-'}   |   PAN: ${branding.pan || '-'}`;
   (doc.splitTextToSize(ident, textW) as string[]).slice(0, 2).forEach((l) => {
     doc.text(l, textX, ty);
     ty += 3.0;
@@ -326,12 +327,10 @@ export function buildVoucherPdf(
   if (isOut) {
     const dv = voucher as DebitVoucher;
     specRow('Supplier / Payee', dv.supplierName, true);
-    specRow('Supplier GSTIN', dv.supplierGstin || '-');
     if (dv.supplierDetails) specRow('Category', dv.supplierDetails);
   } else {
     const cv = voucher as CreditVoucher;
     specRow('Customer / Party', cv.customerName, true);
-    specRow('Customer GSTIN', cv.customerGstin || '-');
     if (cv.receiptType) specRow('Receipt Type', cv.receiptType);
   }
   specRow(isOut ? 'Payment Purpose' : 'Receipt Purpose', voucher.description || '-');
@@ -466,42 +465,54 @@ export function buildVoucherPdf(
 
   // ───────────────────────── 9. Attachments ─────────────────────────
   const atts = includeAttachments && voucher.attachments ? voucher.attachments : [];
-  atts.forEach((att, idx) => {
+  // Every attachment becomes one or more full pages (PDF files are pre-rendered page by page).
+  type AttPage = { att: (typeof atts)[number]; img: string | null; part: string };
+  const attPages: AttPage[] = [];
+  atts.forEach((att) => {
+    const imgs: string[] = resolvedPages?.[att.id] && resolvedPages[att.id].length
+      ? resolvedPages[att.id]
+      : att.mimeType && att.mimeType.startsWith('image/') && att.dataUrl
+        ? [att.dataUrl]
+        : [];
+    if (imgs.length === 0) attPages.push({ att, img: null, part: '' });
+    else imgs.forEach((img, i) => attPages.push({ att, img, part: imgs.length > 1 ? `  ·  Page ${i + 1} of ${imgs.length}` : '' }));
+  });
+  attPages.forEach((pg, idx) => {
+    const att = pg.att;
     doc.addPage();
     // header strip
     setFill(headerColor);
     doc.roundedRect(M, M, CW, 11, 2, 2, 'F');
     font('bold', 8.2, [255, 255, 255]);
-    doc.text(`SUPPORTING DOCUMENT  ${idx + 1} / ${atts.length}`, M + 5, M + 7, { charSpace: 0.5 });
+    doc.text(`SUPPORTING DOCUMENT  ${idx + 1} / ${attPages.length}`, M + 5, M + 7, { charSpace: 0.5 });
     font('normal', 7, [203, 213, 225]);
     doc.text(voucher.voucherNo || '', M + CW - 5, M + 7, { align: 'right' });
 
     font('semibold', 8, INK);
-    doc.text(att.name || 'Attachment', M, M + 18);
+    doc.text((doc.splitTextToSize(att.name || 'Attachment', CW) as string[])[0], M, M + 18);
     font('normal', 6.8, MUTED);
-    const meta = `${att.type || 'Document'}  ·  ${(att.size / 1024).toFixed(1)} KB  ·  Uploaded ${
+    const meta = `${att.type || 'Document'}  ·  ${((att.size || 0) / 1024).toFixed(1)} KB  ·  Uploaded ${
       att.uploadedAt ? new Date(att.uploadedAt).toLocaleString('en-IN') : 'N/A'
-    }`;
+    }${pg.part}`;
     doc.text(meta, M, M + 22.5);
 
     const boxY = M + 27;
     const boxH = bottomLimit - boxY;
-    const isImg = att.mimeType && att.mimeType.startsWith('image/') && att.dataUrl;
     let drawn = false;
-    if (isImg) {
+    if (pg.img) {
       setDraw(LINE);
       doc.setLineWidth(0.25);
       doc.roundedRect(M, boxY, CW, boxH, 2, 2, 'S');
-      drawn = addImageContain(att.dataUrl, M + 3, boxY + 3, CW - 6, boxH - 6);
+      drawn = addImageContain(pg.img, M + 2, boxY + 2, CW - 4, boxH - 4);
     }
     if (!drawn) {
       setFill(PANEL);
       setDraw(LINE);
       doc.roundedRect(M, boxY, CW, 36, 2.5, 2.5, 'FD');
       font('bold', 9.5, INK);
-      doc.text(att.name || 'Electronic file', M + 8, boxY + 15);
+      doc.text((doc.splitTextToSize(att.name || 'Electronic file', CW - 16) as string[])[0], M + 8, boxY + 15);
       font('normal', 7.5, MUTED);
-      doc.text('Electronic file stored in the Raviraja CRM archive (preview not available in PDF).', M + 8, boxY + 23);
+      doc.text('This file type cannot be shown inside the PDF. It is stored in the Documents register.', M + 8, boxY + 23);
     }
   });
 
@@ -532,12 +543,63 @@ export function buildVoucherPdf(
   return { doc, fileName: `${voucher.voucherNo || 'Voucher'}_Raviraja_Industries.pdf` };
 }
 
-export function generateVoucherPdf(
+/** Rasterises PDF attachments (all pages) so they can be placed on PDF pages. Images need no conversion. */
+export async function resolveAttachmentPages(voucher: InVoucher): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
+  const atts = voucher.attachments || [];
+  for (const att of atts) {
+    const isPdf = att.dataUrl && (att.mimeType === 'application/pdf' || /\.pdf$/i.test(att.name || ''));
+    if (!isPdf) continue;
+    try {
+      const pdfjs: any = await import('pdfjs-dist');
+      const workerUrl: any = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+      const base64 = att.dataUrl.split(',')[1] || '';
+      const bin = atob(base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+      const pages: string[] = [];
+      const maxPages = Math.min(pdf.numPages, 30);
+      for (let n = 1; n <= maxPages; n++) {
+        const page = await pdf.getPage(n);
+        const vp0 = page.getViewport({ scale: 1 });
+        const scale = Math.min(2.2, 1500 / Math.max(vp0.width, vp0.height));
+        const vp = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(vp.width);
+        canvas.height = Math.floor(vp.height);
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        pages.push(canvas.toDataURL('image/jpeg', 0.85));
+      }
+      if (pages.length) out[att.id] = pages;
+    } catch (e) {
+      console.warn('Could not render PDF attachment', att.name, e);
+    }
+  }
+  return out;
+}
+
+/** Builds the PDF with all attachments fully embedded (async because PDF files are rendered first). */
+export async function buildVoucherPdfFull(
   voucher: InVoucher,
-  includeAttachments: boolean = false,
+  includeAttachments: boolean,
   customOptions?: PdfBrandingOptions
-): void {
-  const { doc, fileName } = buildVoucherPdf(voucher, includeAttachments, customOptions);
+): Promise<{ doc: jsPDF; fileName: string }> {
+  const resolved = includeAttachments ? await resolveAttachmentPages(voucher) : undefined;
+  return buildVoucherPdf(voucher, includeAttachments, customOptions, resolved);
+}
+
+/** Downloads the voucher PDF. Attachments are included by default whenever the voucher has any. */
+export async function generateVoucherPdf(
+  voucher: InVoucher,
+  includeAttachments: boolean = true,
+  customOptions?: PdfBrandingOptions
+): Promise<void> {
+  const { doc, fileName } = await buildVoucherPdfFull(voucher, includeAttachments, customOptions);
   savePdfFile(doc, fileName);
 }
 

@@ -153,12 +153,14 @@ export const accessStore = {
     if (cloudEnabled) void pushPermissions(DEFAULT_ROLE_PERMISSIONS);
   },
   getSessionUserId(): string | null {
-    try { return localStorage.getItem(K_SESSION); } catch { return null; }
+    try { return sessionStorage.getItem(K_SESSION); } catch { return null; }
   },
   setSession(userId: string | null) {
     try {
-      if (userId) localStorage.setItem(K_SESSION, userId);
-      else localStorage.removeItem(K_SESSION);
+      // Per-tab session: a freshly opened link always shows the login screen.
+      if (userId) sessionStorage.setItem(K_SESSION, userId);
+      else sessionStorage.removeItem(K_SESSION);
+      localStorage.removeItem(K_SESSION); // clear older "stay signed in" sessions
     } catch { /* ignore */ }
   },
 };

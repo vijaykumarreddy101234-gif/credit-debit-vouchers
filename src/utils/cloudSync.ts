@@ -11,7 +11,8 @@ export const cloudEnabled = Boolean(url && anon && !/YOUR_|MY_/i.test(url));
 
 export const supabase: SupabaseClient | null = cloudEnabled
   ? createClient(url as string, anon as string, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      // Session lives only in this browser tab: opening the link again (new tab / new visit) always asks for login.
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: window.sessionStorage },
     })
   : null;
 
@@ -370,7 +371,7 @@ export async function signInWithGoogle(): Promise<void> {
 export async function signOutCloud(): Promise<void> {
   stopCloud();
   try { await supabase?.auth.signOut(); } catch { /* ignore */ }
-  try { localStorage.removeItem(K_SESSION); } catch { /* ignore */ }
+  try { sessionStorage.removeItem(K_SESSION); localStorage.removeItem(K_SESSION); } catch { /* ignore */ }
 }
 
 /** Checks the Google session, confirms the Admin has granted this Gmail access, then loads everything and goes live. */
@@ -394,7 +395,7 @@ export async function startCloudSession(): Promise<CloudSessionResult> {
     subscribe();
 
     const user = toAppUser(own);
-    try { rawSet.call(localStorage, K_SESSION, user.id); } catch { /* ignore */ }
+    try { sessionStorage.setItem(K_SESSION, user.id); } catch { /* ignore */ }
     return { status: 'ok', user };
   } catch (e: any) {
     return { status: 'error', message: e?.message || 'Could not reach the cloud database.' };
