@@ -32,6 +32,7 @@ const KV_MAP: Record<string, string> = {
   raviraja_crm_suppliers_v1: 'suppliers',
   raviraja_crm_customers_v1: 'customers',
   raviraja_crm_main_accounts_v1: 'main_accounts',
+  raviraja_crm_sub_accounts_v1: 'sub_accounts',
   raviraja_crm_cashiers_v1: 'cashiers',
   raviraja_crm_receivers_v1: 'receivers',
   raviraja_crm_pdf_branding_v1: 'pdf_branding',

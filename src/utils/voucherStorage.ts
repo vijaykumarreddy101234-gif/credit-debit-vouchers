@@ -209,6 +209,7 @@ let memoryAccounts: AccountHead[] | null = null;
 let memoryUser: UserProfile | null = null;
 
 const STORAGE_KEY_MAIN_ACCOUNTS = 'raviraja_crm_main_accounts_v1';
+const STORAGE_KEY_SUB_ACCOUNTS = 'raviraja_crm_sub_accounts_v1';
 const STORAGE_KEY_CASHIERS = 'raviraja_crm_cashiers_v1';
 const STORAGE_KEY_RECEIVERS = 'raviraja_crm_receivers_v1';
 
@@ -221,11 +222,41 @@ export const DEFAULT_MAIN_ACCOUNTS = [
   'HDFC Operations A/c'
 ];
 
+export const DEFAULT_SUB_ACCOUNTS = ['Expenses', 'Purchase', 'Transport', 'Market', 'Labour', 'Bills', 'Others'];
+let memorySubAccounts: string[] | null = null;
 let memoryMainAccounts: string[] | null = null;
 let memoryCashiers: string[] | null = null;
 let memoryReceivers: string[] | null = null;
 
 export const voucherStorage = {
+  getSubAccounts(): string[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_SUB_ACCOUNTS);
+      if (stored) return JSON.parse(stored);
+      localStorage.setItem(STORAGE_KEY_SUB_ACCOUNTS, JSON.stringify(DEFAULT_SUB_ACCOUNTS));
+      return [...DEFAULT_SUB_ACCOUNTS];
+    } catch {
+      if (!memorySubAccounts) memorySubAccounts = [...DEFAULT_SUB_ACCOUNTS];
+      return memorySubAccounts;
+    }
+  },
+  saveSubAccounts(list: string[]): string[] {
+    try { localStorage.setItem(STORAGE_KEY_SUB_ACCOUNTS, JSON.stringify(list)); } catch {}
+    memorySubAccounts = list;
+    return list;
+  },
+  addSubAccount(name: string): string[] {
+    const list = this.getSubAccounts();
+    const v = name.trim();
+    return v && !list.includes(v) ? this.saveSubAccounts([...list, v]) : list;
+  },
+  updateSubAccount(oldName: string, newName: string): string[] {
+    return this.saveSubAccounts(this.getSubAccounts().map((i) => (i === oldName ? newName.trim() : i)));
+  },
+  deleteSubAccount(name: string): string[] {
+    return this.saveSubAccounts(this.getSubAccounts().filter((i) => i !== name));
+  },
+
   getMainAccounts(): string[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_MAIN_ACCOUNTS);

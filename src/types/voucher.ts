@@ -93,6 +93,7 @@ export interface DebitVoucher extends BaseVoucher {
   cashierName?: string;
   purchaseOrderNumber?: string;
   mainAccount?: string;
+  subAccount?: string;
 }
 
 export interface CreditVoucher extends BaseVoucher {

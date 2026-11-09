@@ -15,6 +15,7 @@ import {
   Plus,
   Settings2,
   Layers,
+  Eraser,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
@@ -71,6 +72,9 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
   const [mainAccount, setMainAccount] = useState<string>(
     initialVoucher?.mainAccount || 'Company Office'
   );
+  // Field 4(B): Sub Account
+  const [subAccount, setSubAccount] = useState<string>(initialVoucher?.subAccount || 'Expenses');
+  const [subAccountList, setSubAccountList] = useState<string[]>(() => voucherStorage.getSubAccounts());
   const [mainAccountList, setMainAccountList] = useState<string[]>(() =>
     voucherStorage.getMainAccounts()
   );
@@ -134,7 +138,7 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
 
   // Modal State for Managing Cell Items (Add / Edit / Delete in cells)
   const [manageCellType, setManageCellType] = useState<
-    'mainAccount' | 'person' | 'cashier' | null
+    'mainAccount' | 'subAccount' | 'person' | 'cashier' | null
   >(null);
   const [newItemInput, setNewItemInput] = useState<string>('');
   const [editingMasterItem, setEditingMasterItem] = useState<{
@@ -237,6 +241,9 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
       const updated = voucherStorage.addMainAccount(val);
       setMainAccountList(updated);
       setMainAccount(val);
+    } else if (manageCellType === 'subAccount') {
+      setSubAccountList(voucherStorage.addSubAccount(val));
+      setSubAccount(val);
     } else if (manageCellType === 'person') {
       const updated = voucherStorage.addSupplier(val);
       setPersonList(updated);
@@ -259,6 +266,9 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
       const updated = voucherStorage.updateMainAccount(oldVal, newVal);
       setMainAccountList(updated);
       if (mainAccount === oldVal) setMainAccount(newVal);
+    } else if (manageCellType === 'subAccount') {
+      setSubAccountList(voucherStorage.updateSubAccount(oldVal, newVal));
+      if (subAccount === oldVal) setSubAccount(newVal);
     } else if (manageCellType === 'person') {
       const updated = voucherStorage.updateSupplier(oldVal, newVal);
       setPersonList(updated);
@@ -279,6 +289,10 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
       const updated = voucherStorage.deleteMainAccount(item);
       setMainAccountList(updated);
       if (mainAccount === item) setMainAccount(updated[0] || '');
+    } else if (manageCellType === 'subAccount') {
+      const updated = voucherStorage.deleteSubAccount(item);
+      setSubAccountList(updated);
+      if (subAccount === item) setSubAccount(updated[0] || '');
     } else if (manageCellType === 'person') {
       const updated = voucherStorage.deleteSupplier(item);
       setPersonList(updated);
@@ -333,6 +347,7 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
       date,
       paymentMode,
       mainAccount,
+      subAccount,
       amount: parseFloat(amount) || 0,
       amountInWords: amountInWords || (amount ? numberToIndianWords(parseFloat(amount)) : ''),
       personName: personName.trim(),
@@ -517,58 +532,44 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
               <label className="block text-xs font-bold text-slate-800 mb-1.5">
                 3. Payment Mode
               </label>
-              <div className="w-full rounded-lg border border-slate-200 bg-white p-3 space-y-2">
-                {(['Cash', 'Bank', 'Cheque', 'UPI', 'Other'] as PaymentMode[]).map((mode) => (
-                  <label
-                    key={mode}
-                    className="flex items-center gap-2.5 text-xs text-slate-700 font-medium cursor-pointer hover:text-slate-900 select-none"
-                  >
-                    <input
-                      type="radio"
-                      name="debitPaymentMode"
-                      value={mode}
-                      checked={paymentMode === mode}
-                      onChange={() => setPaymentMode(mode)}
-                      className="w-3.5 h-3.5 text-slate-800 border-slate-300 focus:ring-slate-500"
-                    />
-                    <span>{mode}</span>
-                  </label>
+              <select
+                value={paymentMode}
+                onChange={(e) => setPaymentMode(e.target.value as PaymentMode)}
+                className="w-full h-11 text-sm rounded-lg border border-slate-200 bg-white px-3 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-rose-300 cursor-pointer"
+              >
+                {(['Cash', 'UPI', 'Bank', 'Cheque', 'Other'] as PaymentMode[]).map((m) => (
+                  <option key={m} value={m}>{m === 'Other' ? 'Others' : m}</option>
                 ))}
-              </div>
+              </select>
             </div>
 
-            {/* 4. Main Account (with Edit / Delete options in cell) */}
-            <div>
+            {/* 4. Main Account (A) and Sub Account (B) */}
+            <div className="space-y-3">
+              <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-slate-800">
-                  4. Main Account
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setManageCellType('mainAccount')}
-                  className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer"
-                  title="Add, Edit or Delete Accounts"
-                >
+                <label className="block text-xs font-bold text-slate-800">4.(A) Main Account</label>
+                <button type="button" onClick={() => setManageCellType('mainAccount')} className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer" title="Add, Edit or Delete">
                   <Settings2 className="w-3 h-3" />
-                  <span>Edit/Add</span>
+                  <span>Add / Edit / Delete</span>
                 </button>
               </div>
-
-              <div className="w-full rounded-lg border border-slate-200 bg-slate-50/30 p-2.5">
-                <select
-                  value={mainAccount}
-                  onChange={(e) => setMainAccount(e.target.value)}
-                  className="w-full text-xs font-bold text-slate-800 bg-transparent border-none p-0 focus:ring-0 mb-0.5 cursor-pointer"
-                >
-                  {mainAccountList.map((acc, idx) => (
-                    <option key={idx} value={acc}>
-                      {acc}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-[10px] text-slate-400 block">
-                  Select account
-                </span>
+              <select value={mainAccount} onChange={(e) => setMainAccount(e.target.value)} className="w-full h-11 text-sm rounded-lg border border-slate-200 bg-white px-3 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-rose-300 cursor-pointer">
+                {!mainAccountList.includes(mainAccount) && mainAccount && <option value={mainAccount}>{mainAccount}</option>}
+                {mainAccountList.map((o) => (<option key={o} value={o}>{o}</option>))}
+              </select>
+              </div>
+              <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-800">4.(B) Sub Account</label>
+                <button type="button" onClick={() => setManageCellType('subAccount')} className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer" title="Add, Edit or Delete">
+                  <Settings2 className="w-3 h-3" />
+                  <span>Add / Edit / Delete</span>
+                </button>
+              </div>
+              <select value={subAccount} onChange={(e) => setSubAccount(e.target.value)} className="w-full h-11 text-sm rounded-lg border border-slate-200 bg-white px-3 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-rose-300 cursor-pointer">
+                {!subAccountList.includes(subAccount) && subAccount && <option value={subAccount}>{subAccount}</option>}
+                {subAccountList.map((o) => (<option key={o} value={o}>{o}</option>))}
+              </select>
               </div>
             </div>
           </div>
@@ -899,79 +900,24 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
               )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              {/* Save */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => handleSave(false)}
-                  disabled={isSubmitting}
-                  className="px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-md transition-colors cursor-pointer w-full text-center"
-                >
-                  Save
-                </button>
-                <span className="text-[10px] text-slate-400 block mt-1 text-center">
-                  Save voucher
-                </span>
-              </div>
-
-              {/* Edit */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => showToast('Fields unlocked for editing')}
-                  className="px-3 py-1.5 text-xs font-bold text-blue-800 bg-blue-100 hover:bg-blue-200 rounded-md transition-colors cursor-pointer w-full text-center"
-                >
-                  Edit
-                </button>
-                <span className="text-[10px] text-slate-400 block mt-1 text-center">
-                  Edit voucher
-                </span>
-              </div>
-
-              {/* Delete */}
-              <div>
-                <button
-                  type="button"
-                  onClick={handleDeleteVoucher}
-                  className="px-3 py-1.5 text-xs font-bold text-rose-800 bg-rose-100 hover:bg-rose-200 rounded-md transition-colors cursor-pointer w-full text-center flex items-center justify-center gap-1"
-                  title={isEditing ? 'Delete voucher permanently' : 'Clear form fields'}
-                >
-                  <Trash2 className="w-3 h-3 text-rose-700" />
-                  <span>Delete</span>
-                </button>
-                <span className="text-[10px] text-slate-400 block mt-1 text-center">
-                  {isEditing ? 'Delete voucher' : 'Clear form'}
-                </span>
-              </div>
-
-              {/* Print */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => handleSave(true)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer w-full text-center"
-                >
-                  Print
-                </button>
-                <span className="text-[10px] text-slate-400 block mt-1 text-center">
-                  Printable voucher
-                </span>
-              </div>
-
-              {/* Excel */}
-              <div>
-                <button
-                  type="button"
-                  onClick={handleExportExcel}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer w-full text-center"
-                >
-                  Excel
-                </button>
-                <span className="text-[10px] text-slate-400 block mt-1 text-center">
-                  Export voucher
-                </span>
-              </div>
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(true)}
+                className="h-11 px-6 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Eraser className="w-4 h-4" />
+                <span>Clear</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSave(false)}
+                disabled={isSubmitting}
+                className="h-11 px-8 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer disabled:opacity-60"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isEditing ? 'Update' : 'Save'}</span>
+              </button>
             </div>
           </div>
 
@@ -984,7 +930,7 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
           <div className="bg-white rounded-xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                Manage {manageCellType === 'mainAccount' ? 'Main Accounts' : manageCellType === 'person' ? 'Persons / Vendors' : 'Cashiers'}
+                Manage {manageCellType === 'mainAccount' ? 'Main Accounts' : manageCellType === 'subAccount' ? 'Sub Accounts' : manageCellType === 'person' ? 'Persons / Vendors' : 'Cashiers'}
               </h4>
               <button
                 type="button"
@@ -1016,7 +962,7 @@ export const DebitVoucherForm: React.FC<DebitVoucherFormProps> = ({
 
             {/* List with inline Edit & Delete */}
             <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-              {(manageCellType === 'mainAccount' ? mainAccountList : manageCellType === 'person' ? personList : cashierList).map((item, idx) => (
+              {(manageCellType === 'mainAccount' ? mainAccountList : manageCellType === 'subAccount' ? subAccountList : manageCellType === 'person' ? personList : cashierList).map((item, idx) => (
                 <div
                   key={idx}
                   className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs"

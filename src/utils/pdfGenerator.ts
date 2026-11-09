@@ -327,7 +327,8 @@ export function buildVoucherPdf(
   if (isOut) {
     const dv = voucher as DebitVoucher;
     specRow('Supplier / Payee', dv.supplierName, true);
-    if (dv.supplierDetails) specRow('Category', dv.supplierDetails);
+    if (dv.mainAccount) specRow('Main Account', dv.mainAccount);
+    if (dv.subAccount) specRow('Sub Account', dv.subAccount);
   } else {
     const cv = voucher as CreditVoucher;
     specRow('Customer / Party', cv.customerName, true);
