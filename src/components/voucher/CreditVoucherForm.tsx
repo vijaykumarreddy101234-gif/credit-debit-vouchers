@@ -12,7 +12,8 @@ import {
   Check,
   Plus,
   Settings2,
-  Layers
+  Layers,
+  Eraser
 } from 'lucide-react';
 import {
   CreditVoucher,
@@ -572,24 +573,16 @@ export const CreditVoucherForm: React.FC<CreditVoucherFormProps> = ({
                 </button>
               </div>
 
-              <div className="w-full rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                className="w-full h-11 text-sm rounded-lg border border-slate-200 bg-white px-3 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-300 cursor-pointer"
+              >
+                {!sourceOptions.includes(source) && <option value={source}>{source}</option>}
                 {sourceOptions.map((opt) => (
-                  <label
-                    key={opt}
-                    className="flex items-center gap-2.5 text-xs text-slate-700 font-medium cursor-pointer hover:text-slate-900 select-none"
-                  >
-                    <input
-                      type="radio"
-                      name="creditSource"
-                      value={opt}
-                      checked={source === opt}
-                      onChange={() => setSource(opt)}
-                      className="w-3.5 h-3.5 text-slate-800 border-slate-300 focus:ring-slate-500"
-                    />
-                    <span>{opt}</span>
-                  </label>
+                  <option key={opt} value={opt}>{opt}</option>
                 ))}
-              </div>
+              </select>
               <div className="mt-1.5">
                 <button
                   type="button"
@@ -710,24 +703,15 @@ export const CreditVoucherForm: React.FC<CreditVoucherFormProps> = ({
               <label className="block text-xs font-bold text-slate-800 mb-1.5">
                 7. Payment Mode
               </label>
-              <div className="w-full rounded-lg border border-slate-200 bg-white p-3 space-y-2">
-                {(['Cash', 'UPI', 'Bank', 'Cheque', 'Others'] as string[]).map((mode) => (
-                  <label
-                    key={mode}
-                    className="flex items-center gap-2.5 text-xs text-slate-700 font-medium cursor-pointer hover:text-slate-900 select-none"
-                  >
-                    <input
-                      type="radio"
-                      name="creditPaymentMode"
-                      value={mode}
-                      checked={receiptMode === (mode === 'Others' ? 'Other' : mode)}
-                      onChange={() => setReceiptMode((mode === 'Others' ? 'Other' : mode) as ReceiptMode)}
-                      className="w-3.5 h-3.5 text-slate-800 border-slate-300 focus:ring-slate-500"
-                    />
-                    <span>{mode}</span>
-                  </label>
+              <select
+                value={receiptMode}
+                onChange={(e) => setReceiptMode(e.target.value as ReceiptMode)}
+                className="w-full h-11 text-sm rounded-lg border border-slate-200 bg-white px-3 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-300 cursor-pointer"
+              >
+                {[['Cash', 'Cash'], ['UPI', 'UPI'], ['Bank', 'Bank'], ['Cheque', 'Cheque'], ['Other', 'Others']].map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
                 ))}
-              </div>
+              </select>
             </div>
           </div>
 
@@ -894,7 +878,7 @@ export const CreditVoucherForm: React.FC<CreditVoucherFormProps> = ({
           <div className="pt-4 border-t border-slate-200">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold text-slate-800">
-                11. Action Buttons
+                Save
               </h3>
               {isEditing && (
                 <button
@@ -909,63 +893,32 @@ export const CreditVoucherForm: React.FC<CreditVoucherFormProps> = ({
               )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              {/* Save */}
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(true)}
+                className="h-11 px-6 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Eraser className="w-4 h-4" />
+                <span>Clear</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSave(true)}
+                disabled={isSubmitting}
+                className="h-11 px-6 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-sm font-bold text-emerald-800 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Save &amp; Print</span>
+              </button>
               <button
                 type="button"
                 onClick={() => handleSave(false)}
                 disabled={isSubmitting}
-                className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
+                className="h-11 px-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer disabled:opacity-60"
               >
-                <Save className="w-5 h-5 text-slate-700 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold text-slate-800">Save</span>
-              </button>
-
-              {/* Edit / Update */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (isEditing) {
-                    handleSave(false);
-                  } else {
-                    showToast('Form ready for editing / updating');
-                  }
-                }}
-                className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
-              >
-                <Edit className="w-5 h-5 text-slate-700 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold text-slate-800">Edit / Update</span>
-              </button>
-
-              {/* Delete */}
-              <button
-                type="button"
-                onClick={handleDeleteVoucher}
-                className="p-3 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
-                title={isEditing ? 'Delete voucher permanently' : 'Clear form fields'}
-              >
-                <Trash2 className="w-5 h-5 text-rose-600 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold text-rose-800">Delete</span>
-              </button>
-
-              {/* Print PDF */}
-              <button
-                type="button"
-                onClick={() => handleSave(true)}
-                className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
-              >
-                <Printer className="w-5 h-5 text-slate-700 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold text-slate-800">Print PDF</span>
-              </button>
-
-              {/* Export Excel */}
-              <button
-                type="button"
-                onClick={handleExportExcel}
-                className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer group shadow-2xs"
-              >
-                <FileSpreadsheet className="w-5 h-5 text-slate-700 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold text-slate-800">Export Excel</span>
+                <Save className="w-4 h-4" />
+                <span>{isEditing ? 'Update' : 'Save'}</span>
               </button>
             </div>
           </div>
